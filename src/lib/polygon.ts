@@ -1,7 +1,8 @@
 import * as BABYLON from '@babylonjs/core';
 
 interface PolygonOptions {
-	nodeSize?: number;
+	nodeDiameter?: number;
+	nodeHeight?: number;
 	nodeColor?: BABYLON.Color3;
 	nodeSelectedColor?: BABYLON.Color3;
 	nodeOpacity?: number;
@@ -42,12 +43,13 @@ export class Polygon {
 		this._selectedNode = null; // Holds the currently selected node mesh
 
 		this.options = {
-			nodeSize: 0.5,
+			nodeDiameter: 0.5,
+			nodeHeight: 3,
 			nodeColor: BABYLON.Color3.Blue(),
 			nodeSelectedColor: BABYLON.Color3.Yellow(),
 			nodeOpacity: 0.7,
-			wallThickness: 0.1,
-			wallHeight: 0.5,
+			wallThickness: 0.03,
+			wallHeight: 2.5,
 			wallColor: BABYLON.Color3.Red(),
 			wallOpacity: 0.7,
 			lineColor: BABYLON.Color3.Green(),
@@ -258,8 +260,8 @@ export class Polygon {
 		const node = BABYLON.MeshBuilder.CreateCylinder(
 			`node_${index}_${this.structureNode.uniqueId}`,
 			{
-				diameter: this.options.nodeSize,
-				height: this.options.nodeSize
+				diameter: this.options.nodeDiameter,
+				height: this.options.nodeHeight
 			},
 			this.scene
 		);
@@ -378,6 +380,7 @@ export class Polygon {
 
 				const [index1, index2] = metadata.pointsIndex;
 				const clickedPosition = pointerInfo.pickInfo.pickedPoint.clone(); // Use clone
+				clickedPosition._y = 0;
 
 				// Determine insertion index (handle wrap-around edge)
 				let insertionIndex;

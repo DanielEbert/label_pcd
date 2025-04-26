@@ -1,4 +1,5 @@
 import * as BABYLON from '@babylonjs/core';
+import * as GUI from '@babylonjs/gui';
 
 export class FreeCameraMousePanningInput implements BABYLON.ICameraInput<BABYLON.FreeCamera> {
 	public camera!: BABYLON.FreeCamera;
@@ -65,7 +66,8 @@ export class FreeCameraMousePanningInput implements BABYLON.ICameraInput<BABYLON
 					const moveZ = deltaY * (this.camera!.orthoTop! - this.camera.orthoBottom!); // Positive Z is typically "up" on the screen in this view
 
 					this.camera.position.x += moveX * this.panningSensibility;
-					this.camera.position.z += moveZ * this.panningSensibility;
+					// * 2 to account for camera viewport is screenHeight / 2
+					this.camera.position.z += moveZ * this.panningSensibility * 2;
 
 					this._previousPointerPosition = currentPosition;
 
@@ -95,20 +97,38 @@ export function setupCamera(
 	engine: BABYLON.Engine,
 	scene: BABYLON.Scene
 ) {
-	var orbitCamera = new BABYLON.ArcRotateCamera(
+	// --- Add Borders using GUI ---
+	const adt = GUI.AdvancedDynamicTexture.CreateFullscreenUI('UI');
+
+	const viewportBorder = new GUI.Rectangle();
+	viewportBorder.width = 1;
+	viewportBorder.height = 1;
+	viewportBorder.horizontalAlignment = GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
+	viewportBorder.verticalAlignment = GUI.Control.VERTICAL_ALIGNMENT_TOP;
+	viewportBorder.left = '0px';
+	viewportBorder.top = '0px';
+	viewportBorder.color = 'black';
+	viewportBorder.thickness = 1;
+	adt.addControl(viewportBorder);
+
+	const orbitCamera = new BABYLON.ArcRotateCamera(
 		'orbitCamera',
 		(3 * Math.PI) / 8,
 		(3 * Math.PI) / 8,
-		1500,
+		30,
 		new BABYLON.Vector3(0, 10, 0),
 		scene
 	);
 	orbitCamera.viewport = new BABYLON.Viewport(0, 0.5, 1, 0.5);
-	orbitCamera.inputs.attached.pointers.buttons = [0, 2];
-	orbitCamera.wheelDeltaPercentage = 0.01;
+	orbitCamera.inertia = 0.1;
+	orbitCamera.panningInertia = 0.1;
+	(orbitCamera.inputs.attached.pointers as BABYLON.ArcRotateCameraPointersInput).buttons = [0, 2];
+	orbitCamera.wheelDeltaPercentage = 0.1;
+	orbitCamera.angularSensibilityX = 150;
+	orbitCamera.angularSensibilityY = 150;
 
 	scene.onBeforeRenderObservable.add(() => {
-		orbitCamera.panningSensibility = (3000 - Math.min(3000, orbitCamera.radius)) / 100;
+		orbitCamera.panningSensibility = (3500 - Math.min(3000, orbitCamera.radius)) / 100;
 	});
 
 	const topDownCamera = new BABYLON.FreeCamera(
@@ -159,11 +179,10 @@ export function setupCamera(
 		topDownCamera.orthoBottom = -orthoSize / 2;
 	};
 
-	updateOrtho(500);
+	updateOrtho(10);
 
 	// Point the camera downwards (looking along -Y axis)
 	topDownCamera.rotation.x = Math.PI / 2;
-	topDownCamera.attachControl(canvas, true);
 	topDownCamera.inputs.removeByType('FreeCameraMouseInput');
 
 	const panningInput = new FreeCameraMousePanningInput(topDownCamera);
@@ -181,8 +200,8 @@ export function setupCamera(
 
 	// Mouse Wheel Zoom
 	const zoomSensitivity = 0.05; // Smaller value = slower zoom
-	const minOrthoSize = 50; // Closest zoom (smallest area)
-	const maxOrthoSize = 10000; // Furthest zoom (largest area)
+	const minOrthoSize = 0.5; // Closest zoom (smallest area)
+	const maxOrthoSize = 100; // Furthest zoom (largest area)
 
 	scene.onPointerObservable.add((pointerInfo) => {
 		if (activeControlCamera != topDownCamera) return;

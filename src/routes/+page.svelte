@@ -1,50 +1,75 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import * as BABYLON from '@babylonjs/core';
-	import { Polygon } from '$lib/Polygon';
+	import { Polygon } from '$lib/polygon';
 	import { setupCamera } from '$lib/camera';
 
-	var createScene = function (engine: BABYLON.Engine): BABYLON.Scene {
+	const createScene = function (engine: BABYLON.Engine): BABYLON.Scene {
 		const scene = new BABYLON.Scene(engine);
 		setupCamera(canvas, engine, scene);
 
-		var light = new BABYLON.DirectionalLight('directional', new BABYLON.Vector3(0, -1, 0), scene);
+		const light = new BABYLON.DirectionalLight('directional', new BABYLON.Vector3(0, -1, 0), scene);
 		light.intensity = 0.7;
 
 		const builder = new Polygon(scene, {
-			nodeSize: 20,
+			nodeDiameter: 0.1,
+			nodeHeight: 3,
 			nodeColor: BABYLON.Color3.Purple(),
-			wallThickness: 5,
-			wallHeight: 10,
+			wallThickness: 0.02,
 			wallColor: BABYLON.Color3.Red(),
 			closePath: true
 		});
 		builder.addPoint(new BABYLON.Vector3(0, 0, 0));
-		builder.addPoint(new BABYLON.Vector3(100, 0, 0));
-		builder.addPoint(new BABYLON.Vector3(100, 0, 100));
-		builder.addPoint(new BABYLON.Vector3(0, 0, 100));
+		builder.addPoint(new BABYLON.Vector3(1, 0, 0));
+		builder.addPoint(new BABYLON.Vector3(1, 0, 1));
+		builder.addPoint(new BABYLON.Vector3(0, 0, 1));
 
-		var pcs = new BABYLON.PointsCloudSystem('pcs', 5, scene);
-		var myfunc = function (particle: BABYLON.Particle, i: number, s: BABYLON.PointsCloudSystem) {
-			particle.position = new BABYLON.Vector3(
-				100 * Math.random(),
-				100 * Math.random(),
-				100 * Math.random()
-			);
-			particle.color = new BABYLON.Color4(
-				Math.random(),
-				Math.random(),
-				Math.random(),
-				Math.random()
-			);
-		};
-		pcs.addPoints(100, myfunc);
-		pcs.buildMeshAsync();
+		fetch('http://127.0.0.1:8000/pcd')
+			.then((response) => response.json())
+			.then((data) => {
+				// TODO: later create maxPointsCount here and then resuse later
+				const maxPointsCount = 128 * 900 * 4 * 2;
+				const pcs = new BABYLON.PointsCloudSystem('pcs', 1, scene);
+				const myfunc = function (
+					particle: BABYLON.Particle,
+					i: number,
+					s: BABYLON.PointsCloudSystem
+				) {
+					if (i >= data.length) return;
+					particle.position = new BABYLON.Vector3(data[i][0], data[i][2], data[i][1]);
+
+					const height = data[i][2];
+					const minHeight = -3;
+					const maxHeight = 2;
+
+					// Shift the range to positive values for log scaling
+					const shiftedHeight = height - minHeight + 1e-6; // add small epsilon to avoid log(0)
+					const shiftedMax = maxHeight - minHeight + 1e-6;
+
+					const logHeight = Math.log(shiftedHeight);
+					const logMax = Math.log(shiftedMax);
+
+					const normalizedHeight = logHeight / logMax;
+					const clampedHeight = Math.max(0, Math.min(1, normalizedHeight));
+
+					const color3 = BABYLON.Color3.FromHSV(
+						(1 - clampedHeight) * 360, // hue from blue to red
+						1.0, // saturation
+						1.0 // value
+					);
+
+					particle.color = new BABYLON.Color4(color3.r, color3.g, color3.b, 1.0);
+				};
+				pcs.addPoints(maxPointsCount, myfunc);
+				pcs.buildMeshAsync();
+			})
+			.catch((error) => console.error('Error:', error));
 
 		return scene;
 	};
 
 	let canvas: HTMLCanvasElement;
+	let fps: HTMLElement;
 
 	onMount(async () => {
 		const engine = new BABYLON.Engine(canvas, true);
@@ -54,6 +79,7 @@
 		engine.runRenderLoop(function () {
 			if (sceneToRender && sceneToRender.activeCamera) {
 				sceneToRender.render();
+				fps.innerHTML = engine.getFps().toFixed() + ' fps';
 			}
 		});
 
@@ -64,3 +90,19 @@
 </script>
 
 <canvas bind:this={canvas} id="renderCanvas" style="width: 100%; height: 100vh;"></canvas>
+<div bind:this={fps} id="fps">0</div>
+
+<style>
+	#fps {
+		position: absolute;
+		background-color: black;
+		border: 2px solid red;
+		text-align: center;
+		font-size: 16px;
+		color: white;
+		top: 15px;
+		right: 10px;
+		width: 60px;
+		height: 20px;
+	}
+</style>
