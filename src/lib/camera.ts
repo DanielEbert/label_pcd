@@ -1,6 +1,10 @@
 import * as BABYLON from '@babylonjs/core';
 import * as GUI from '@babylonjs/gui';
 
+export class CameraContainer {
+    public activeControlCamera: BABYLON.Camera | null = null;
+};
+
 export class FreeCameraMousePanningInput implements BABYLON.ICameraInput<BABYLON.FreeCamera> {
 	public camera!: BABYLON.FreeCamera;
 	public panningSensibility: number = 1;
@@ -95,7 +99,8 @@ export class FreeCameraMousePanningInput implements BABYLON.ICameraInput<BABYLON
 export function setupCamera(
 	canvas: HTMLCanvasElement,
 	engine: BABYLON.Engine,
-	scene: BABYLON.Scene
+	scene: BABYLON.Scene,
+    cc: CameraContainer
 ) {
 	// --- Add Borders using GUI ---
 	const adt = GUI.AdvancedDynamicTexture.CreateFullscreenUI('UI');
@@ -133,7 +138,7 @@ export function setupCamera(
 
 	const topDownCamera = new BABYLON.FreeCamera(
 		'topDownCamera',
-		new BABYLON.Vector3(0, 1000, 0),
+		new BABYLON.Vector3(0, 20, 0),
 		scene
 	);
 	topDownCamera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
@@ -141,8 +146,6 @@ export function setupCamera(
 
 	scene.activeCameras?.push(orbitCamera);
 	scene.activeCameras?.push(topDownCamera);
-
-	let activeControlCamera: BABYLON.Camera | null = null;
 
 	scene.onPointerObservable.add((pointerInfo) => {
 		if (
@@ -158,15 +161,15 @@ export function setupCamera(
 
 			const targetCamera = mouseY < midpointY ? orbitCamera : topDownCamera;
 
-			if (targetCamera !== activeControlCamera) {
+			if (targetCamera !== cc.activeControlCamera) {
 				console.log(`Switching control to: ${targetCamera.name}`);
 
-				if (activeControlCamera) {
-					activeControlCamera.detachControl();
+				if (cc.activeControlCamera) {
+					cc.activeControlCamera.detachControl();
 				}
 
 				targetCamera.attachControl(canvas, true);
-				activeControlCamera = targetCamera;
+				cc.activeControlCamera = targetCamera;
 			}
 		}
 	});
@@ -204,7 +207,7 @@ export function setupCamera(
 	const maxOrthoSize = 100; // Furthest zoom (largest area)
 
 	scene.onPointerObservable.add((pointerInfo) => {
-		if (activeControlCamera != topDownCamera) return;
+		if (cc.activeControlCamera != topDownCamera) return;
 		if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERWHEEL) {
 			const event = pointerInfo.event as WheelEvent;
 			let delta = -event.deltaY;

@@ -14,4 +14,4 @@ RUN npm install
 EXPOSE 5173
 
 # Start the development server
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+CMD ["sh", "-c", "CI=true npm run dev -- --host 0.0.0.0"]
