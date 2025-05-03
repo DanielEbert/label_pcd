@@ -1,5 +1,6 @@
 import * as BABYLON from '@babylonjs/core';
 import * as GUI from '@babylonjs/gui';
+import { clamp } from './util';
 
 export class CameraContainer {
     public activeControlCamera: BABYLON.Camera | null = null;
@@ -129,18 +130,19 @@ export function setupCamera(
     const rotSpeed = 0.005;
 
     scene.onPointerObservable.add((pointerInfo) => {
-        if (cc.activeControlCamera != freeCamera) return;
         const evt = pointerInfo.event;
         switch (pointerInfo.type) {
             case BABYLON.PointerEventTypes.POINTERDOWN:
-                if (evt.button === 1) {
-                    isPanning = true;
-                    lastPointerX = evt.clientX;
-                    lastPointerY = evt.clientY;
-                } else if (evt.button === 2) {
-                    isRotating = true;
-                    lastPointerX = evt.clientX;
-                    lastPointerY = evt.clientY;
+                if (cc.activeControlCamera == freeCamera) {
+                    if (evt.button === 1) {
+                        isPanning = true;
+                        lastPointerX = evt.clientX;
+                        lastPointerY = evt.clientY;
+                    } else if (evt.button === 2) {
+                        isRotating = true;
+                        lastPointerX = evt.clientX;
+                        lastPointerY = evt.clientY;
+                    }
                 }
                 break;
             case BABYLON.PointerEventTypes.POINTERUP:
@@ -162,9 +164,8 @@ export function setupCamera(
                     freeCamera.position.addInPlace(up.scale(dy * panSpeed));
                 }
                 else if (isRotating) {
-                    // Rotate: adjust yaw & pitch
                     freeCamera.rotation.y += dx * rotSpeed;
-                    freeCamera.rotation.x += dy * rotSpeed;
+                    freeCamera.rotation.x = clamp(freeCamera.rotation.x + dy * rotSpeed, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
                 }
                 break;
         }
@@ -187,11 +188,13 @@ export function setupCamera(
     let isSpacePressed = false;
     let isShiftPressed = false;
     window.addEventListener('keydown', (event) => {
-        if (event.key === ' ' || event.code === "Space") {
-            isSpacePressed = true;
-        }
-        if (event.key === "Shift" || event.code === "ShiftLeft" || event.code === "ShiftRight") {
-            isShiftPressed = true;
+        if (cc.activeControlCamera === freeCamera) {
+            if (event.key === ' ' || event.code === "Space") {
+                isSpacePressed = true;
+            }
+            if (event.key === "Shift" || event.code === "ShiftLeft" || event.code === "ShiftRight") {
+                isShiftPressed = true;
+            }
         }
     });
     window.addEventListener('keyup', (event) => {

@@ -380,7 +380,8 @@ export class Polygon {
 
 				const [index1, index2] = metadata.pointsIndex;
 				const clickedPosition = pointerInfo.pickInfo.pickedPoint.clone(); // Use clone
-				clickedPosition._y = 0;
+                // TODO: set to obstacle height
+				clickedPosition._y = -2.5;
 
 				// Determine insertion index (handle wrap-around edge)
 				let insertionIndex;

@@ -32,21 +32,23 @@
 		const scene = new BABYLON.Scene(engine);
 		setupCamera(canvas, engine, scene, cameraContainer);
 
-		const light = new BABYLON.DirectionalLight('directional', new BABYLON.Vector3(0, -1, 0), scene);
-		light.intensity = 0.7;
+        const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+		// const light = new BABYLON.DirectionalLight('directional', new BABYLON.Vector3(0, -1, 0), scene);
+		// light.intensity = 0.7;
 
 		const builder = new Polygon(scene, {
 			nodeDiameter: 0.1,
-			nodeHeight: 3,
+			nodeHeight: 1,
+            wallHeight: 1,
 			nodeColor: BABYLON.Color3.Purple(),
 			wallThickness: 0.02,
 			wallColor: BABYLON.Color3.Red(),
 			closePath: true
 		});
-		builder.addPoint(new BABYLON.Vector3(0, 0, 0));
-		builder.addPoint(new BABYLON.Vector3(1, 0, 0));
-		builder.addPoint(new BABYLON.Vector3(1, 0, 1));
-		builder.addPoint(new BABYLON.Vector3(0, 0, 1));
+		builder.addPoint(new BABYLON.Vector3(0, -2.5, 0));
+		builder.addPoint(new BABYLON.Vector3(1, -2.5, 0));
+		builder.addPoint(new BABYLON.Vector3(1, -2.5, 1));
+		builder.addPoint(new BABYLON.Vector3(0, -2.5, 1));
 
 		pointCloudManager = new PointCloudManager(scene);
 		pointCloudManager.loadPointCloud('http://127.0.0.1:8001/pcd').then(() => {
@@ -67,10 +69,10 @@
 			drawMode = DrawMode.Erase;
 			if (brushManager) brushManager.drawMode = drawMode;
 		}
-		if (event.key === '[') {
+		if (event.ctrlKey && event.key === 'z') {
 			if (historyManager) historyManager.undo();
 		}
-		if (event.key === ']') {
+		if (event.ctrlKey && event.key === 'y') {
 			if (historyManager) historyManager.redo();
 		}
 	};
@@ -154,6 +156,7 @@
 		right: 10px;
 		width: 60px;
 		height: 20px;
+        user-select: none;
 	}
 
 	#infoText {
@@ -167,5 +170,6 @@
 		font-family: monospace;
 		font-size: 12px;
 		z-index: 1000;
+        user-select: none;
 	}
 </style>
