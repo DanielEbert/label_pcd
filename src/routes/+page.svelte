@@ -4,12 +4,14 @@
 	import { Polygon } from '$lib/polygon';
 	import { setupCamera, CameraContainer } from '$lib/camera';
 	import { SpatialHash } from '$lib/spatial_hash';
+    import { clamp } from '$lib/util'
 
 	let canvas: HTMLCanvasElement;
 	let scene: BABYLON.Scene | null = null;
 	let fps: HTMLElement;
 	let pcs: BABYLON.PointsCloudSystem | null = null;
 	let pcsLookup: SpatialHash | null = null;
+    let pcsClass: number[] | null;
 	let isPointCloudReady = false;
 	let cameraContainer = new CameraContainer();
 
@@ -17,18 +19,19 @@
 	// TODO: refactor to lib
 	let isPainting = false;
 	const paintKey = '1'; // Key to trigger painting
-	const brushRadius = 0.2; //world units distance from the ray
+	let brushRadius = 0.2; //world units distance from the ray
+    const minBrushSize = 0.01;
+    const maxBrushSize = 10;
 	const paintColor = new BABYLON.Color4(0, 1, 0, 1); // Green color for painting
 	const highlightColor = new BABYLON.Color4(1, 1, 1, 1); // white
-	let paintedPointIndices = new Set<Number>();
 	let highlightedPointIdxs: number[] = [];
 	let originalColors = new Map<number, BABYLON.Color4>();
 	let lastPaintRay: BABYLON.Ray | null = null;
-    let lastCursorX = 0;
-    let lastCursorY = 0;
-    let pendingCursorUpdate = false;
+	let lastCursorX = 0;
+	let lastCursorY = 0;
+	let pendingCursorUpdate = false;
 
-    let updatedParticles = new Set<BABYLON.CloudPoint>();
+	let updatedParticleIdxs = new Set<number>();
 
 	const createScene = function (engine: BABYLON.Engine): BABYLON.Scene {
 		const scene = new BABYLON.Scene(engine);
@@ -55,7 +58,7 @@
 			.then((response) => response.json())
 			.then((data) => {
 				// TODO: later create maxPointsCount here and then resuse later
-				const maxPointsCount = 128 * 900 * 4 * 2;
+				// const maxPointsCount = 128 * 900 * 4 * 2;
 				pcs = new BABYLON.PointsCloudSystem('pcs', 1, scene);
 				const myfunc = function (
 					particle: BABYLON.Particle,
@@ -87,11 +90,13 @@
 
 					particle.color = new BABYLON.Color4(color3.r, color3.g, color3.b, 1.0);
 				};
-				pcs.addPoints(maxPointsCount, myfunc);
+				pcs.addPoints(data.length, myfunc);
 				pcs.buildMeshAsync().then((mesh: any) => {
 					isPointCloudReady = true;
 					pcsLookup = new SpatialHash(brushRadius * 2, pcs!.particles!);
 				});
+                // TODO: later give class thats in data
+                pcsClass = Array(data.length).fill(0);
 			})
 			.catch((error) => console.error('Error:', error));
 
@@ -99,7 +104,6 @@
 	};
 
 	const paintPoints = () => {
-		let startTime = performance.now();
 		if (
 			!isPointCloudReady ||
 			!pcs ||
@@ -158,16 +162,16 @@
 					particle.color.a !== paintColor.a
 				) {
 					particle.color = paintColor.clone();
-					paintedPointIndices.add(i);
-                    updatedParticles.add(particle);
+					updatedParticleIdxs.add(i);
+                    pcsClass![i] = 1;
 					// console.log(`Painting point index: ${i}`); // Debugging
 				}
 			});
 		} else {
-            if (cameraContainer.activeControlCamera.name === 'orbitCamera') {
-                // can't be used currently because too slow with spatial hashing datastructure
-                return;
-            }
+			if (cameraContainer.activeControlCamera.name === 'orbitCamera') {
+				// can't be used currently because too slow with spatial hashing datastructure
+				return;
+			}
 			highlightedPointIdxs = pcsLookup!.findParticlesNearRay(
 				ray,
 				rayLength,
@@ -178,11 +182,9 @@
 				const particle = pcs!.particles[i];
 				originalColors.set(i, particle.color!.clone());
 				particle.color = highlightColor;
-                updatedParticles.add(particle)
+				updatedParticleIdxs.add(i);
 			});
 		}
-
-		console.log('->', performance.now() - startTime);
 	};
 
 	const clearHighlightedPoints = () => {
@@ -190,7 +192,7 @@
 			highlightedPointIdxs.forEach((i) => {
 				if (originalColors.has(i)) {
 					pcs!.particles[i].color = originalColors.get(i)!;
-                    updatedParticles.add(pcs!.particles[i]);
+					updatedParticleIdxs.add(i);
 				}
 			});
 			highlightedPointIdxs = [];
@@ -201,7 +203,7 @@
 	const handleKeyDown = (event: KeyboardEvent) => {
 		if (event.key === paintKey && !isPainting) {
 			isPainting = true;
-            pendingCursorUpdate = true;
+			pendingCursorUpdate = true;
 		}
 	};
 
@@ -209,7 +211,7 @@
 		if (event.key === paintKey && isPainting) {
 			isPainting = false;
 			lastPaintRay = null;
-            pendingCursorUpdate = true;
+			pendingCursorUpdate = true;
 		}
 	};
 
@@ -227,32 +229,31 @@
 			}
 		});
 
-        scene.onPointerObservable.add((pointerInfo) => {
-            if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERMOVE) {
-                lastCursorX = scene!.pointerX;
-                lastCursorY = scene!.pointerY;
-                pendingCursorUpdate = true;
-            }
-        })
+		scene.onPointerObservable.add((pointerInfo) => {
+			if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERMOVE) {
+                const event = pointerInfo.event as PointerEvent;
+                if (event.altKey) {
+                    const xDiff = lastCursorX - scene!.pointerX;
+                    brushRadius = clamp(brushRadius - xDiff / 500, minBrushSize, maxBrushSize)
+                }
+
+				lastCursorX = scene!.pointerX;
+				lastCursorY = scene!.pointerY;
+				pendingCursorUpdate = true;
+			}
+		});
 
 		scene.onBeforeRenderObservable.add(() => {
-            if (pendingCursorUpdate) {
-                paintPoints();
-                pendingCursorUpdate = false;
-            }
-			if (pcs && updatedParticles.size > 0) {
-                const start = performance.now()
-                updatedParticles.forEach(p => {
-                    if (p && p.idx !== undefined && p.idx < pcs!.nbParticles) {
-                        console.log('h1')
-                        pcs!.updateParticle(p);
-                    }
-                })
-                updatedParticles.clear()
-                // console.log('+ ' + (performance.now() - start))
-				// console.log("Calling pcs.setParticles()"); // Debug
-				// pcs.setParticles();
-				// needsPCSUpdate = false;
+			if (pendingCursorUpdate) {
+				paintPoints();
+				pendingCursorUpdate = false;
+			}
+			if (pcs && updatedParticleIdxs.size > 0) {
+				const sorted = Array.from(updatedParticleIdxs).sort((a, b) => a - b);
+				const startIdx = sorted[0];
+				const endIdx = sorted[sorted.length - 1];
+				pcs.setParticles(startIdx, endIdx);
+                updatedParticleIdxs.clear();
 			}
 		});
 

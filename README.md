@@ -2,6 +2,9 @@
 
 - add polygon tool
 - add undo, redo
-- change brush size
 - controls feel bad
-- visualize brush size
+
+
+
+- 1 click mark img for relabel newly and from existing set
+- ml uses that directly, reruns, and lets me pick for relabel again
