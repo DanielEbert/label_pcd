@@ -4,14 +4,14 @@
 	import { Polygon } from '$lib/polygon';
 	import { setupCamera, CameraContainer } from '$lib/camera';
 	import { SpatialHash } from '$lib/spatial_hash';
-    import { clamp } from '$lib/util'
+	import { clamp } from '$lib/util';
 
 	let canvas: HTMLCanvasElement;
 	let scene: BABYLON.Scene | null = null;
 	let fps: HTMLElement;
 	let pcs: BABYLON.PointsCloudSystem | null = null;
 	let pcsLookup: SpatialHash | null = null;
-    let pcsClass: number[] | null;
+	let pcsClass: number[] | null;
 	let isPointCloudReady = false;
 	let cameraContainer = new CameraContainer();
 
@@ -20,8 +20,8 @@
 	let isPainting = false;
 	const paintKey = '1'; // Key to trigger painting
 	let brushRadius = 0.2; //world units distance from the ray
-    const minBrushSize = 0.01;
-    const maxBrushSize = 10;
+	const minBrushSize = 0.01;
+	const maxBrushSize = 10;
 	const paintColor = new BABYLON.Color4(0, 1, 0, 1); // Green color for painting
 	const highlightColor = new BABYLON.Color4(1, 1, 1, 1); // white
 	let highlightedPointIdxs: number[] = [];
@@ -95,8 +95,8 @@
 					isPointCloudReady = true;
 					pcsLookup = new SpatialHash(brushRadius * 2, pcs!.particles!);
 				});
-                // TODO: later give class thats in data
-                pcsClass = Array(data.length).fill(0);
+				// TODO: later give class thats in data
+				pcsClass = Array(data.length).fill(0);
 			})
 			.catch((error) => console.error('Error:', error));
 
@@ -163,7 +163,7 @@
 				) {
 					particle.color = paintColor.clone();
 					updatedParticleIdxs.add(i);
-                    pcsClass![i] = 1;
+					pcsClass![i] = 1;
 					// console.log(`Painting point index: ${i}`); // Debugging
 				}
 			});
@@ -230,16 +230,35 @@
 		});
 
 		scene.onPointerObservable.add((pointerInfo) => {
+            const event = pointerInfo.event as PointerEvent;
 			if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERMOVE) {
-                const event = pointerInfo.event as PointerEvent;
-                if (event.altKey) {
-                    const xDiff = lastCursorX - scene!.pointerX;
-                    brushRadius = clamp(brushRadius - xDiff / 500, minBrushSize, maxBrushSize)
-                }
+				if (event.ctrlKey) {
+					const xDiff = lastCursorX - scene!.pointerX;
+					brushRadius = clamp(brushRadius - xDiff / 500, minBrushSize, maxBrushSize);
+				}
 
 				lastCursorX = scene!.pointerX;
 				lastCursorY = scene!.pointerY;
 				pendingCursorUpdate = true;
+			}
+
+			switch (pointerInfo.type) {
+				case BABYLON.PointerEventTypes.POINTERDOWN:
+					if (event.button === 0) {
+						// Left mouse button
+						isPainting = true;
+						pendingCursorUpdate = true;
+					}
+					break;
+
+				case BABYLON.PointerEventTypes.POINTERUP:
+					if (event.button === 0 && isPainting) {
+						isPainting = false;
+						lastPaintRay = null;
+						pendingCursorUpdate = true;
+                        // TODO: store history if changes were made
+					}
+					break;
 			}
 		});
 
@@ -253,7 +272,7 @@
 				const startIdx = sorted[0];
 				const endIdx = sorted[sorted.length - 1];
 				pcs.setParticles(startIdx, endIdx);
-                updatedParticleIdxs.clear();
+				updatedParticleIdxs.clear();
 			}
 		});
 

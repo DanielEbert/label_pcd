@@ -116,25 +116,140 @@ export function setupCamera(
     viewportBorder.thickness = 1;
     adt.addControl(viewportBorder);
 
-    const orbitCamera = new BABYLON.ArcRotateCamera(
-        'orbitCamera',
-        (3 * Math.PI) / 8,
-        (3 * Math.PI) / 8,
-        30,
-        new BABYLON.Vector3(0, 10, 0),
-        scene
-    );
-    orbitCamera.viewport = new BABYLON.Viewport(0, 0.5, 1, 0.5);
-    orbitCamera.inertia = 0.1;
-    orbitCamera.panningInertia = 0.1;
-    (orbitCamera.inputs.attached.pointers as BABYLON.ArcRotateCameraPointersInput).buttons = [0, 2];
-    orbitCamera.wheelDeltaPercentage = 0.1;
-    orbitCamera.angularSensibilityX = 150;
-    orbitCamera.angularSensibilityY = 150;
+    const freeCamera = new BABYLON.FreeCamera("freeCamera", new BABYLON.Vector3(0, 0, -1), scene);
+    freeCamera.setTarget(BABYLON.Vector3.Zero())
+    freeCamera.inputs.clear()
+    freeCamera.inputs.addKeyboard()
 
-    scene.onBeforeRenderObservable.add(() => {
-        orbitCamera.panningSensibility = (3500 - Math.min(3000, orbitCamera.radius)) / 100;
+    let isPanning = false;
+    let isRotating = false;
+    let lastPointerX = 0;
+    let lastPointerY = 0;
+    const panSpeed = 0.02;
+    const rotSpeed = 0.005;
+
+    scene.onPointerObservable.add((pointerInfo) => {
+        if (cc.activeControlCamera != freeCamera) return;
+        const evt = pointerInfo.event;
+        switch (pointerInfo.type) {
+            case BABYLON.PointerEventTypes.POINTERDOWN:
+                if (evt.button === 2) {
+                    isPanning = true;
+                    lastPointerX = evt.clientX;
+                    lastPointerY = evt.clientY;
+                } else if (evt.button === 1) {
+                    isRotating = true;
+                    lastPointerX = evt.clientX;
+                    lastPointerY = evt.clientY;
+                }
+                break;
+            case BABYLON.PointerEventTypes.POINTERUP:
+                if (evt.button === 2) isPanning = false;
+                if (evt.button === 1) isRotating = false;
+                break;
+            case BABYLON.PointerEventTypes.POINTERMOVE:
+                const dx = evt.clientX - lastPointerX;
+                const dy = evt.clientY - lastPointerY;
+                lastPointerX = evt.clientX;
+                lastPointerY = evt.clientY;
+
+                if (isPanning) {
+                    // Pan: move in camera's local X (right) and Y (up) axes
+                    const right = freeCamera.getDirection(BABYLON.Axis.X);
+                    const up = freeCamera.getDirection(BABYLON.Axis.Y);
+
+                    freeCamera.position.addInPlace(right.scale(-dx * panSpeed));
+                    freeCamera.position.addInPlace(up.scale(dy * panSpeed));
+                }
+                else if (isRotating) {
+                    // Rotate: adjust yaw & pitch
+                    freeCamera.rotation.y += dx * rotSpeed;
+                    freeCamera.rotation.x += dy * rotSpeed;
+                }
+                break;
+        }
+    })
+    freeCamera.viewport = new BABYLON.Viewport(0, 0.5, 1, 0.5);
+
+    freeCamera.keysUp.push(87); // W
+    freeCamera.keysDown.push(83); // S
+    freeCamera.keysLeft.push(65); // A
+    freeCamera.keysRight.push(68); // D
+
+    const freeCameraKeyboardInput = new BABYLON.FreeCameraKeyboardMoveInput();
+    freeCameraKeyboardInput.keysUp = [87]; // W
+    freeCameraKeyboardInput.keysDown = [83]; // S
+    freeCameraKeyboardInput.keysLeft = [65]; // A
+    freeCameraKeyboardInput.keysRight = [68]; // D
+
+    let previousFreeCameraKeyboardTime = performance.now()
+
+    let isSpacePressed = false;
+    let isShiftPressed = false;
+    window.addEventListener('keydown', (event) => {
+        if (event.key === ' ' || event.code === "Space") {
+            isSpacePressed = true;
+        }
+        if (event.key === "Shift" || event.code === "ShiftLeft" || event.code === "ShiftRight") {
+            isShiftPressed = true;
+        }
     });
+    window.addEventListener('keyup', (event) => {
+        if (event.key === ' ' || event.code === "Space") {
+            isSpacePressed = false;
+        }
+        if (event.key === "Shift" || event.code === "ShiftLeft" || event.code === "ShiftRight") {
+            isShiftPressed = false;
+        }
+    });
+
+    freeCameraKeyboardInput.checkInputs = function () {
+        if (!this.camera) return;
+
+        const camera = this.camera as BABYLON.FreeCamera;
+
+        const currentTime = performance.now();
+        const deltaTime = (currentTime - previousFreeCameraKeyboardTime) / 1000; // Convert ms to seconds
+        previousFreeCameraKeyboardTime = currentTime;
+        const speed = camera.speed * deltaTime;
+
+        const forward = freeCamera.getDirection(BABYLON.Axis.Z).scale(speed);
+        const right = freeCamera.getDirection(BABYLON.Axis.X).scale(speed);
+        const up = freeCamera.getDirection(BABYLON.Axis.Y).scale(speed * 0.5);
+
+        // Create movement vectors for each direction in world space
+        // @ts-ignore
+        if (this._keys.includes(this.keysUp[0])) {
+            // W key - Move forward (in -Z direction in world space)
+            camera.position.addInPlace(forward);
+        }
+        // @ts-ignore
+        if (this._keys.includes(this.keysDown[0])) {
+            // S key - Move backward (in +Z direction in world space)
+            camera.position.subtractInPlace(forward);
+        }
+        // @ts-ignore
+        if (this._keys.includes(this.keysRight[0])) {
+            // A key - Move left (in -X direction in world space)
+            camera.position.addInPlace(right);
+        }
+        // @ts-ignore
+        if (this._keys.includes(this.keysLeft[0])) {
+            // D key - Move right (in +X direction in world space)
+            camera.position.subtractInPlace(right);
+        }
+        if (isSpacePressed) {
+            camera.position.addInPlace(up);
+        }
+        if (isShiftPressed) {
+            camera.position.subtractInPlace(up);
+        }
+    };
+
+    freeCamera.inputs.removeByType('FreeCameraKeyboardMoveInput');
+    freeCamera.inputs.add(freeCameraKeyboardInput);
+    // units per second
+    freeCamera.speed = 5;
 
     const topDownCamera = new BABYLON.FreeCamera(
         'topDownCamera',
@@ -144,7 +259,7 @@ export function setupCamera(
     topDownCamera.mode = BABYLON.Camera.ORTHOGRAPHIC_CAMERA;
     topDownCamera.viewport = new BABYLON.Viewport(0, 0, 1, 0.5);
 
-    scene.activeCameras?.push(orbitCamera);
+    scene.activeCameras?.push(freeCamera);
     scene.activeCameras?.push(topDownCamera);
 
     scene.onPointerObservable.add((pointerInfo) => {
@@ -159,7 +274,7 @@ export function setupCamera(
             const canvasHeight = canvasRect.height;
             const midpointY = canvasHeight / 2;
 
-            const targetCamera = mouseY < midpointY ? orbitCamera : topDownCamera;
+            const targetCamera = mouseY < midpointY ? freeCamera : topDownCamera;
 
             if (targetCamera !== cc.activeControlCamera) {
                 console.log(`Switching control to: ${targetCamera.name}`);
@@ -175,7 +290,7 @@ export function setupCamera(
     });
 
     const updateOrtho = (orthoSize: number) => {
-        const aspect = engine.getAspectRatio(orbitCamera);
+        const aspect = engine.getAspectRatio(topDownCamera);
         topDownCamera.orthoLeft = (-orthoSize * aspect) / 2;
         topDownCamera.orthoRight = (orthoSize * aspect) / 2;
         topDownCamera.orthoTop = orthoSize / 2;
@@ -193,13 +308,10 @@ export function setupCamera(
 
     // Allow moving with WASD or arrow keys (already default)
     // Limit movement to XZ plane only (FreeCamera does this by default when looking down)
-    // TODO: currently only a and d keys work
-    // likely moves along a wrong axis
     topDownCamera.keysUp.push(87); // W
     topDownCamera.keysDown.push(83); // S
     topDownCamera.keysLeft.push(65); // A
     topDownCamera.keysRight.push(68); // D
-    topDownCamera.speed = 0.5; // Adjust keyboard movement speed
 
     const keyboardInput = new BABYLON.FreeCameraKeyboardMoveInput();
     keyboardInput.keysUp = [87]; // W
@@ -207,7 +319,7 @@ export function setupCamera(
     keyboardInput.keysLeft = [65]; // A
     keyboardInput.keysRight = [68]; // D
 
-    let previousTime = performance.now()
+    let previousTopDownCameraKeyboardTime = performance.now()
 
     keyboardInput.checkInputs = function () {
         if (!this.camera) return;
@@ -215,8 +327,8 @@ export function setupCamera(
         const camera = this.camera as BABYLON.FreeCamera;
 
         const currentTime = performance.now();
-        const deltaTime = (currentTime - previousTime) / 1000; // Convert ms to seconds
-        previousTime = currentTime;
+        const deltaTime = (currentTime - previousTopDownCameraKeyboardTime) / 1000; // Convert ms to seconds
+        previousTopDownCameraKeyboardTime = currentTime;
         const speed = camera.speed * deltaTime;
 
         // Create movement vectors for each direction in world space
