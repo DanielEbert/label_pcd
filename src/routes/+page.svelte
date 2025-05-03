@@ -5,20 +5,24 @@
 	import { setupCamera, CameraContainer } from '$lib/camera';
 	import { SpatialHash } from '$lib/spatial_hash';
 	import { clamp } from '$lib/util';
+	import { DrawMode } from '$lib/brush';
 
 	let canvas: HTMLCanvasElement;
 	let scene: BABYLON.Scene | null = null;
 	let fps: HTMLElement;
+	let infoText: HTMLElement;
 	let pcs: BABYLON.PointsCloudSystem | null = null;
 	let pcsLookup: SpatialHash | null = null;
 	let pcsClass: number[] | null;
 	let isPointCloudReady = false;
 	let cameraContainer = new CameraContainer();
+    // likely want more advanced history with go forward later
+    let pcsClassHistory: number[][] = [];
 
 	// Paint Brush
 	// TODO: refactor to lib
 	let isPainting = false;
-	const paintKey = '1'; // Key to trigger painting
+	let drawMode = $state(DrawMode.Draw);
 	let brushRadius = 0.2; //world units distance from the ray
 	const minBrushSize = 0.01;
 	const maxBrushSize = 10;
@@ -32,6 +36,36 @@
 	let pendingCursorUpdate = false;
 
 	let updatedParticleIdxs = new Set<number>();
+
+    $effect(() => {
+        if (infoText) {
+            infoText.innerHTML = drawMode == DrawMode.Draw ? 'Drawing' : 'Erasing';
+        }            
+    })
+
+	const getParticleInitColor = (particle: BABYLON.Particle | BABYLON.CloudPoint) => {
+		const height = particle.position.y;
+		const minHeight = -3;
+		const maxHeight = 2;
+
+		// Shift the range to positive values for log scaling
+		const shiftedHeight = height - minHeight + 1e-6; // add small epsilon to avoid log(0)
+		const shiftedMax = maxHeight - minHeight + 1e-6;
+
+		const logHeight = Math.log(shiftedHeight);
+		const logMax = Math.log(shiftedMax);
+
+		const normalizedHeight = logHeight / logMax;
+		const clampedHeight = Math.max(0, Math.min(1, normalizedHeight));
+
+		const color3 = BABYLON.Color3.FromHSV(
+			(1 - clampedHeight) * 360, // hue from blue to red
+			1.0, // saturation
+			1.0 // value
+		);
+
+		return new BABYLON.Color4(color3.r, color3.g, color3.b, 1.0);
+	};
 
 	const createScene = function (engine: BABYLON.Engine): BABYLON.Scene {
 		const scene = new BABYLON.Scene(engine);
@@ -67,28 +101,7 @@
 				) {
 					if (i >= data.length) return;
 					particle.position = new BABYLON.Vector3(data[i][0], data[i][2], data[i][1]);
-
-					const height = data[i][2];
-					const minHeight = -3;
-					const maxHeight = 2;
-
-					// Shift the range to positive values for log scaling
-					const shiftedHeight = height - minHeight + 1e-6; // add small epsilon to avoid log(0)
-					const shiftedMax = maxHeight - minHeight + 1e-6;
-
-					const logHeight = Math.log(shiftedHeight);
-					const logMax = Math.log(shiftedMax);
-
-					const normalizedHeight = logHeight / logMax;
-					const clampedHeight = Math.max(0, Math.min(1, normalizedHeight));
-
-					const color3 = BABYLON.Color3.FromHSV(
-						(1 - clampedHeight) * 360, // hue from blue to red
-						1.0, // saturation
-						1.0 // value
-					);
-
-					particle.color = new BABYLON.Color4(color3.r, color3.g, color3.b, 1.0);
+					particle.color = getParticleInitColor(particle);
 				};
 				pcs.addPoints(data.length, myfunc);
 				pcs.buildMeshAsync().then((mesh: any) => {
@@ -97,6 +110,7 @@
 				});
 				// TODO: later give class thats in data
 				pcsClass = Array(data.length).fill(0);
+                pcsClassHistory.push([...pcsClass]);
 			})
 			.catch((error) => console.error('Error:', error));
 
@@ -154,17 +168,28 @@
 
 			particleIdxsNearRay!.forEach((i) => {
 				const particle = pcs!.particles[i];
-				if (
-					!particle.color ||
-					particle.color.r !== paintColor.r ||
-					particle.color.g !== paintColor.g ||
-					particle.color.b !== paintColor.b ||
-					particle.color.a !== paintColor.a
-				) {
-					particle.color = paintColor.clone();
-					updatedParticleIdxs.add(i);
-					pcsClass![i] = 1;
-					// console.log(`Painting point index: ${i}`); // Debugging
+				let targetColor: BABYLON.Color4 | null = null;
+				let classValue: number | null = null;
+				if (drawMode === DrawMode.Draw) {
+					targetColor = paintColor;
+					classValue = 1;
+				} else if (drawMode === DrawMode.Erase) {
+					targetColor = getParticleInitColor(particle);
+					classValue = 0;
+				}
+
+				if (targetColor && classValue !== null) {
+					if (
+						!particle.color ||
+						particle.color.r !== targetColor.r ||
+						particle.color.g !== targetColor.g ||
+						particle.color.b !== targetColor.b ||
+						particle.color.a !== targetColor.a
+					) {
+						particle.color = targetColor.clone();
+						updatedParticleIdxs.add(i);
+						pcsClass![i] = classValue;
+					}
 				}
 			});
 		} else {
@@ -201,19 +226,35 @@
 	};
 
 	const handleKeyDown = (event: KeyboardEvent) => {
-		if (event.key === paintKey && !isPainting) {
-			isPainting = true;
-			pendingCursorUpdate = true;
+		if (event.key === '1') {
+			drawMode = DrawMode.Draw;
 		}
+		if (event.key === '2') {
+			drawMode = DrawMode.Erase;
+		}
+        if (event.key === '-') {
+            if (pcsClassHistory.length >= 2) {
+                // remove current state
+                const currentPcsClass = pcsClassHistory.pop()
+                pcsClass = pcsClassHistory[pcsClassHistory.length - 1];
+                // TODO: now we need to redraw. should maybe also check diff
+                // between the 2 and set color accordingly
+                for (let idx = 0; idx < pcsClass.length; idx++) {
+                    const curVal = currentPcsClass![idx];
+                    const prevVal = pcsClass[idx];
+                    if (curVal == prevVal) continue;
+                    if (prevVal === 0) {
+                        pcs!.particles[idx].color = getParticleInitColor(pcs!.particles[idx]);
+                    } else if (prevVal === 1) {
+                        pcs!.particles[idx].color = paintColor;
+                    }
+                    updatedParticleIdxs.add(idx);
+                }
+            }
+        }
 	};
 
-	const handleKeyUp = (event: KeyboardEvent) => {
-		if (event.key === paintKey && isPainting) {
-			isPainting = false;
-			lastPaintRay = null;
-			pendingCursorUpdate = true;
-		}
-	};
+	const handleKeyUp = (event: KeyboardEvent) => {};
 
 	onMount(async () => {
 		const engine = new BABYLON.Engine(canvas, true);
@@ -230,7 +271,7 @@
 		});
 
 		scene.onPointerObservable.add((pointerInfo) => {
-            const event = pointerInfo.event as PointerEvent;
+			const event = pointerInfo.event as PointerEvent;
 			if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERMOVE) {
 				if (event.ctrlKey) {
 					const xDiff = lastCursorX - scene!.pointerX;
@@ -256,7 +297,9 @@
 						isPainting = false;
 						lastPaintRay = null;
 						pendingCursorUpdate = true;
-                        // TODO: store history if changes were made
+                        if (pcsClass) {
+                            pcsClassHistory.push([...pcsClass]);
+                        }
 					}
 					break;
 			}
@@ -288,6 +331,7 @@
 
 <canvas bind:this={canvas} id="renderCanvas" style="width: 100%; height: 100vh;"></canvas>
 <div bind:this={fps} id="fps">0</div>
+<div bind:this={infoText} id="infoText">Drawing</div>
 
 <style>
 	#fps {
@@ -301,5 +345,18 @@
 		right: 10px;
 		width: 60px;
 		height: 20px;
+	}
+
+	#infoText {
+		position: fixed;
+		bottom: 4px;
+		right: 4px;
+		background-color: rgba(0, 0, 0, 0.3);
+		color: white;
+		padding: 2px 4px;
+		border-radius: 5px;
+		font-family: monospace;
+		font-size: 12px;
+		z-index: 1000;
 	}
 </style>

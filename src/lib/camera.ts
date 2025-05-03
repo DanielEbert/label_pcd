@@ -133,19 +133,19 @@ export function setupCamera(
         const evt = pointerInfo.event;
         switch (pointerInfo.type) {
             case BABYLON.PointerEventTypes.POINTERDOWN:
-                if (evt.button === 2) {
+                if (evt.button === 1) {
                     isPanning = true;
                     lastPointerX = evt.clientX;
                     lastPointerY = evt.clientY;
-                } else if (evt.button === 1) {
+                } else if (evt.button === 2) {
                     isRotating = true;
                     lastPointerX = evt.clientX;
                     lastPointerY = evt.clientY;
                 }
                 break;
             case BABYLON.PointerEventTypes.POINTERUP:
-                if (evt.button === 2) isPanning = false;
-                if (evt.button === 1) isRotating = false;
+                if (evt.button === 1) isPanning = false;
+                if (evt.button === 2) isRotating = false;
                 break;
             case BABYLON.PointerEventTypes.POINTERMOVE:
                 const dx = evt.clientX - lastPointerX;
