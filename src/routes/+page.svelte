@@ -9,17 +9,26 @@
 	let scene: BABYLON.Scene | null = null;
 	let fps: HTMLElement;
 	let pcs: BABYLON.PointsCloudSystem | null = null;
-    let pcsLookup: SpatialHash | null = null;
+	let pcsLookup: SpatialHash | null = null;
 	let isPointCloudReady = false;
-    let cameraContainer = new CameraContainer();
+	let cameraContainer = new CameraContainer();
 
-	// --- Paint Brush Logic State ---
+	// Paint Brush
+	// TODO: refactor to lib
 	let isPainting = false;
 	const paintKey = '1'; // Key to trigger painting
 	const brushRadius = 0.2; //world units distance from the ray
 	const paintColor = new BABYLON.Color4(0, 1, 0, 1); // Green color for painting
-	let paintedPointIndices = new Set<number>();
-	let needsPCSUpdate = false;
+	const highlightColor = new BABYLON.Color4(1, 1, 1, 1); // white
+	let paintedPointIndices = new Set<Number>();
+	let highlightedPointIdxs: number[] = [];
+	let originalColors = new Map<number, BABYLON.Color4>();
+	let lastPaintRay: BABYLON.Ray | null = null;
+    let lastCursorX = 0;
+    let lastCursorY = 0;
+    let pendingCursorUpdate = false;
+
+    let updatedParticles = new Set<BABYLON.CloudPoint>();
 
 	const createScene = function (engine: BABYLON.Engine): BABYLON.Scene {
 		const scene = new BABYLON.Scene(engine);
@@ -45,7 +54,6 @@
 		fetch('http://127.0.0.1:8001/pcd')
 			.then((response) => response.json())
 			.then((data) => {
-				console.log('here');
 				// TODO: later create maxPointsCount here and then resuse later
 				const maxPointsCount = 128 * 900 * 4 * 2;
 				pcs = new BABYLON.PointsCloudSystem('pcs', 1, scene);
@@ -82,7 +90,7 @@
 				pcs.addPoints(maxPointsCount, myfunc);
 				pcs.buildMeshAsync().then((mesh: any) => {
 					isPointCloudReady = true;
-                    pcsLookup = new SpatialHash(brushRadius * 2, pcs!.particles!);
+					pcsLookup = new SpatialHash(brushRadius * 2, pcs!.particles!);
 				});
 			})
 			.catch((error) => console.error('Error:', error));
@@ -91,59 +99,57 @@
 	};
 
 	const paintPoints = () => {
+		let startTime = performance.now();
 		if (
-			!isPainting ||
 			!isPointCloudReady ||
 			!pcs ||
 			!scene ||
 			!scene.activeCamera ||
-            !cameraContainer.activeControlCamera ||
+			!cameraContainer.activeControlCamera ||
 			!pcs.particles ||
 			pcs.particles.length == 0
 		)
 			return;
 		const ray = scene.createPickingRay(
-			scene.pointerX,
-			scene.pointerY,
+			lastCursorX,
+			lastCursorY,
 			BABYLON.Matrix.Identity(),
 			cameraContainer.activeControlCamera,
 			false
 		);
 		ray.direction.normalize();
-		let pointsChanged = false;
 
-        let startTime = performance.now()
+		const rayLength = 40;
+		let particleIdxsNearRay = null;
 
-        pcsLookup!.findParticlesNearRay(ray, 40, brushRadius, pcs.particles).forEach(i => {
-            const particle = pcs!.particles[i];
-            if (
-					!particle.color ||
-					particle.color.r !== paintColor.r ||
-					particle.color.g !== paintColor.g ||
-					particle.color.b !== paintColor.b ||
-					particle.color.a !== paintColor.a
-				) {
-					particle.color = paintColor.clone();
-					paintedPointIndices.add(i);
-					pointsChanged = true;
-					// console.log(`Painting point index: ${i}`); // Debugging
-				}
-        })
+		clearHighlightedPoints();
 
-  /*
-		// TODO: should have data structure for points for faster lookup, like spatial hashing
-		for (let i = 0; i < pcs.particles.length; i++) {
-			const particle = pcs.particles[i];
-			if (!particle || !particle.position) continue;
-            // TODO: should  check if point is behind camera
-			// Calculate distance from point to the infinite line defined by the ray
-			// Using Vector3.Cross product magnitude: ||(point - ray.origin) x ray.direction|| / ||ray.direction||
-			// Since ray.direction is normalized, denominator is 1.
-			const pointToOrigin = particle.position.subtract(ray.origin);
-			const crossProduct = BABYLON.Vector3.Cross(pointToOrigin, ray.direction);
-			const distanceToRay = crossProduct.length();
+		if (isPainting) {
+			if (lastPaintRay == null) {
+				particleIdxsNearRay = pcsLookup!.findParticlesNearRay(
+					ray,
+					rayLength,
+					brushRadius,
+					pcs.particles
+				);
+			} else {
+				const a = ray.origin;
+				const b = ray.origin.add(ray.direction.normalize().scale(rayLength));
+				const c = lastPaintRay.origin;
+				const d = lastPaintRay.origin.add(lastPaintRay.direction.normalize().scale(rayLength));
+				particleIdxsNearRay = pcsLookup!.findParticlesNearRectangle(
+					a,
+					b,
+					c,
+					d,
+					brushRadius,
+					pcs.particles
+				);
+			}
+			lastPaintRay = ray;
 
-			if (distanceToRay <= brushRadius) {
+			particleIdxsNearRay!.forEach((i) => {
+				const particle = pcs!.particles[i];
 				if (
 					!particle.color ||
 					particle.color.r !== paintColor.r ||
@@ -153,42 +159,57 @@
 				) {
 					particle.color = paintColor.clone();
 					paintedPointIndices.add(i);
-					pointsChanged = true;
+                    updatedParticles.add(particle);
 					// console.log(`Painting point index: ${i}`); // Debugging
 				}
-			}
-		}*/
-
-		if (pointsChanged) {
-			needsPCSUpdate = true;
+			});
+		} else {
+            if (cameraContainer.activeControlCamera.name === 'orbitCamera') {
+                // can't be used currently because too slow with spatial hashing datastructure
+                return;
+            }
+			highlightedPointIdxs = pcsLookup!.findParticlesNearRay(
+				ray,
+				rayLength,
+				brushRadius,
+				pcs.particles
+			);
+			highlightedPointIdxs.forEach((i) => {
+				const particle = pcs!.particles[i];
+				originalColors.set(i, particle.color!.clone());
+				particle.color = highlightColor;
+                updatedParticles.add(particle)
+			});
 		}
 
-        console.log('->', performance.now() - startTime)
+		console.log('->', performance.now() - startTime);
+	};
+
+	const clearHighlightedPoints = () => {
+		if (highlightedPointIdxs.length > 0 && pcs && pcs.particles) {
+			highlightedPointIdxs.forEach((i) => {
+				if (originalColors.has(i)) {
+					pcs!.particles[i].color = originalColors.get(i)!;
+                    updatedParticles.add(pcs!.particles[i]);
+				}
+			});
+			highlightedPointIdxs = [];
+			originalColors.clear();
+		}
 	};
 
 	const handleKeyDown = (event: KeyboardEvent) => {
 		if (event.key === paintKey && !isPainting) {
 			isPainting = true;
-            paintPoints();
-			// console.log("Painting started"); // Debug
-			// Optionally change cursor style
-			// canvas.style.cursor = 'crosshair';
+            pendingCursorUpdate = true;
 		}
 	};
 
 	const handleKeyUp = (event: KeyboardEvent) => {
 		if (event.key === paintKey && isPainting) {
 			isPainting = false;
-			// console.log("Painting stopped"); // Debug
-			// Restore cursor style
-			// canvas.style.cursor = 'default';
-		}
-	};
-
-	const handlePointerMove = (event: PointerEvent) => {
-		// here to ensures responsiveness to mouse movement *while* painting.
-		if (isPainting) {
-			paintPoints();
+			lastPaintRay = null;
+            pendingCursorUpdate = true;
 		}
 	};
 
@@ -200,22 +221,44 @@
 		engine.runRenderLoop(function () {
 			if (sceneToRender && sceneToRender.activeCamera) {
 				sceneToRender.render();
-				fps.innerHTML = engine.getFps().toFixed() + ' fps';
+				if (fps) {
+					fps.innerHTML = engine.getFps().toFixed() + ' fps';
+				}
 			}
 		});
 
+        scene.onPointerObservable.add((pointerInfo) => {
+            if (pointerInfo.type === BABYLON.PointerEventTypes.POINTERMOVE) {
+                lastCursorX = scene!.pointerX;
+                lastCursorY = scene!.pointerY;
+                pendingCursorUpdate = true;
+            }
+        })
+
 		scene.onBeforeRenderObservable.add(() => {
-			if (needsPCSUpdate && pcs) {
+            if (pendingCursorUpdate) {
+                paintPoints();
+                pendingCursorUpdate = false;
+            }
+			if (pcs && updatedParticles.size > 0) {
+                const start = performance.now()
+                updatedParticles.forEach(p => {
+                    if (p && p.idx !== undefined && p.idx < pcs!.nbParticles) {
+                        console.log('h1')
+                        pcs!.updateParticle(p);
+                    }
+                })
+                updatedParticles.clear()
+                // console.log('+ ' + (performance.now() - start))
 				// console.log("Calling pcs.setParticles()"); // Debug
-				pcs.setParticles();
-				needsPCSUpdate = false;
+				// pcs.setParticles();
+				// needsPCSUpdate = false;
 			}
 		});
 
 		// --- Add Event Listeners ---
 		window.addEventListener('keydown', handleKeyDown);
 		window.addEventListener('keyup', handleKeyUp);
-		canvas.addEventListener('pointermove', handlePointerMove);
 
 		window.addEventListener('resize', function () {
 			engine.resize();
