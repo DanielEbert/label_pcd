@@ -18,7 +18,7 @@ export class BrushManager {
     private lastPaintRay: BABYLON.Ray | null = null;
 
     private paintColor = new BABYLON.Color4(0, 1, 0, 1); // Green color for painting
-	private highlightColor = new BABYLON.Color4(1, 1, 1, 1); // white
+	private highlightColor = new BABYLON.Color4(235 / 255, 137 / 255, 52 / 255, 1); // white
 
     private highlightedPointIdxs: number[] = [];
     // could be simplified, we have func to get original color back

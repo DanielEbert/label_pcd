@@ -40,6 +40,10 @@ export class PointCloudManager {
     }
 
     getParticleInitColor = (particle: BABYLON.Particle | BABYLON.CloudPoint) => {
+        // maybe this is better, i dont know. should maybe color based on density of cell here,
+        // maybe pre-cald on frontend and stored in special val of each particle
+        return new BABYLON.Color4(1, 1, 1, 1);
+
         const height = particle.position.y;
         const minHeight = -3;
         const maxHeight = 2;

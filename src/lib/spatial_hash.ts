@@ -63,7 +63,6 @@ export class SpatialHash {
                 const particle = particles[i];
                 if (!particle || !particle.position) return;
 
-                // TODO: check if in front of camera
                 const pointToOrigin = particle.position.subtract(ray.origin);
                 const crossProduct = BABYLON.Vector3.Cross(pointToOrigin, ray.direction);
                 const distanceToRay = crossProduct.length();

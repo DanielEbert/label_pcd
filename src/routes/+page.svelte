@@ -36,19 +36,19 @@
 		// const light = new BABYLON.DirectionalLight('directional', new BABYLON.Vector3(0, -1, 0), scene);
 		// light.intensity = 0.7;
 
-		const builder = new Polygon(scene, {
-			nodeDiameter: 0.1,
-			nodeHeight: 1,
-            wallHeight: 1,
-			nodeColor: BABYLON.Color3.Purple(),
-			wallThickness: 0.02,
-			wallColor: BABYLON.Color3.Red(),
-			closePath: true
-		});
-		builder.addPoint(new BABYLON.Vector3(0, -2.5, 0));
-		builder.addPoint(new BABYLON.Vector3(1, -2.5, 0));
-		builder.addPoint(new BABYLON.Vector3(1, -2.5, 1));
-		builder.addPoint(new BABYLON.Vector3(0, -2.5, 1));
+		// const builder = new Polygon(scene, {
+		// 	nodeDiameter: 0.1,
+		// 	nodeHeight: 1,
+  //           wallHeight: 1,
+		// 	nodeColor: BABYLON.Color3.Purple(),
+		// 	wallThickness: 0.02,
+		// 	wallColor: BABYLON.Color3.Red(),
+		// 	closePath: true
+		// });
+		// builder.addPoint(new BABYLON.Vector3(0, -2.5, 0));
+		// builder.addPoint(new BABYLON.Vector3(1, -2.5, 0));
+		// builder.addPoint(new BABYLON.Vector3(1, -2.5, 1));
+		// builder.addPoint(new BABYLON.Vector3(0, -2.5, 1));
 
 		pointCloudManager = new PointCloudManager(scene);
 		pointCloudManager.loadPointCloud('http://127.0.0.1:8001/pcd').then(() => {
