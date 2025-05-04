@@ -5,6 +5,7 @@
 - multiple pcds in the same view
 - move between pcds easily
 - creating a polygon node should select it
+- likely add ignore color
 
 - 1 click mark img for relabel newly and from existing set
 - ml uses that directly, reruns, and lets me pick for relabel again
