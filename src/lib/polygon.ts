@@ -1,23 +1,22 @@
 import * as BABYLON from '@babylonjs/core';
+import { LAYER_MASK_TOPDOWN_ONLY } from './camera';
 
 interface PolygonOptions {
 	nodeDiameter?: number;
-	nodeHeight?: number;
 	nodeColor?: BABYLON.Color3;
 	nodeSelectedColor?: BABYLON.Color3;
 	nodeOpacity?: number;
-	wallThickness?: number;
-	wallHeight?: number;
 	wallColor?: BABYLON.Color3;
 	wallOpacity?: number;
 	lineColor?: BABYLON.Color3;
 	closePath?: boolean;
+    nodeHeight?: number;
 }
 
 export class Polygon {
+	public nodePositions: BABYLON.Vector3[] = []; // Array of world positions
 	private scene: BABYLON.Scene;
 	private structureNode: BABYLON.TransformNode;
-	private nodePositions: BABYLON.Vector3[] = []; // Array of world positions
 	private nodes: BABYLON.Mesh[] = []; // Array of node meshes (cylinders)
 	private edges: BABYLON.Mesh[] = []; // Array of connection meshes (walls)
 	private _selectedNode: BABYLON.Mesh | null = null; // Holds the currently selected node mesh
@@ -43,17 +42,15 @@ export class Polygon {
 		this._selectedNode = null; // Holds the currently selected node mesh
 
 		this.options = {
-			nodeDiameter: 0.5,
-			nodeHeight: 3,
+			nodeDiameter: 0.2,
 			nodeColor: BABYLON.Color3.Blue(),
 			nodeSelectedColor: BABYLON.Color3.Yellow(),
-			nodeOpacity: 0.7,
-			wallThickness: 0.03,
-			wallHeight: 2.5,
+			nodeOpacity: 1,
 			wallColor: BABYLON.Color3.Red(),
-			wallOpacity: 0.7,
+			wallOpacity: 1,
 			lineColor: BABYLON.Color3.Green(),
 			closePath: true,
+            nodeHeight: 2.5,
 			...options
 		};
 
@@ -63,11 +60,16 @@ export class Polygon {
 			scene
 		);
 		this.nodeMaterial.diffuseColor = this.options.nodeColor;
+        this.nodeMaterial.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+        this.nodeMaterial.specularPower = 32;
+
 		this.wallMaterial = new BABYLON.StandardMaterial(
 			`wallMat_${this.structureNode.uniqueId}`,
 			scene
 		);
 		this.wallMaterial.diffuseColor = this.options.wallColor;
+        this.wallMaterial.specularColor = new BABYLON.Color3(0.2, 0.2, 0.2);
+        this.wallMaterial.specularPower = 32;
 
 		this._addInteractionObservers();
 		this._addKeyboardObserver();
@@ -171,26 +173,28 @@ export class Polygon {
 			const edgeName = `edge_${i}_${nextIndex}_${this.structureNode.uniqueId}`;
 			let edgeMesh = null;
 
+            const path = [p1.clone(), p2.clone()]
+
 			const direction = p2.subtract(p1);
 			const distance = direction.length();
 			if (distance > 1e-6) {
 				// Avoid zero-size walls
-				const wall = BABYLON.MeshBuilder.CreateBox(
+				const wall = BABYLON.MeshBuilder.CreateTube(
 					edgeName,
 					{
-						width: this.options.wallThickness,
-						height: this.options.wallHeight,
-						depth: distance
+                        path,
+                        radius: this.options.nodeDiameter / 2 * 0.5,
+                        sideOrientation: BABYLON.Mesh.DOUBLESIDE,
+                        updatable: false
 					},
 					this.scene
 				);
-				wall.position = BABYLON.Vector3.Center(p1, p2);
 				wall.material = this.wallMaterial;
-				wall.lookAt(wall.position.add(direction)); // Align depth (-Z) with direction
 				wall.parent = this.structureNode;
 				wall.metadata = { builder: this, type: 'edge', pointsIndex: [i, nextIndex] };
 				wall.isPickable = true;
 				wall.visibility = this.options.wallOpacity;
+                wall.layerMask = LAYER_MASK_TOPDOWN_ONLY;
 				edgeMesh = wall;
 			} else {
 				console.warn(`Points for edge index ${i} are coincident. Skipping wall.`);
@@ -257,11 +261,10 @@ export class Polygon {
 	}
 
 	_createNodeMesh(position: BABYLON.Vector3, index: number): BABYLON.Mesh {
-		const node = BABYLON.MeshBuilder.CreateCylinder(
+		const node = BABYLON.MeshBuilder.CreateSphere(
 			`node_${index}_${this.structureNode.uniqueId}`,
 			{
 				diameter: this.options.nodeDiameter,
-				height: this.options.nodeHeight
 			},
 			this.scene
 		);
@@ -271,6 +274,7 @@ export class Polygon {
 		node.isPickable = true;
 		node.metadata = { builder: this, type: 'node', index: index };
 		node.visibility = this.options.nodeOpacity;
+        node.layerMask = LAYER_MASK_TOPDOWN_ONLY;
 
 		const dragBehavior = new BABYLON.PointerDragBehavior({
 			dragPlaneNormal: new BABYLON.Vector3(0, 1, 0)
@@ -380,8 +384,7 @@ export class Polygon {
 
 				const [index1, index2] = metadata.pointsIndex;
 				const clickedPosition = pointerInfo.pickInfo.pickedPoint.clone(); // Use clone
-                // TODO: set to obstacle height
-				clickedPosition._y = -2.5;
+				clickedPosition._y = this.options.nodeHeight;
 
 				// Determine insertion index (handle wrap-around edge)
 				let insertionIndex;

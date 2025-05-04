@@ -6,6 +6,7 @@
 	import { BrushManager, DrawMode } from '$lib/brush';
 	import { PointCloudManager } from '$lib/pointcloud';
 	import { HistoryManager } from '$lib/history_manager';
+	import { PolygonManager } from '$lib/polygon_manager';
 
 	let canvas: HTMLCanvasElement;
 	let scene: BABYLON.Scene | null = null;
@@ -14,6 +15,7 @@
 	let cameraContainer = new CameraContainer();
 
 	let pointCloudManager: PointCloudManager;
+    let polygonManager: PolygonManager;
 	let brushManager: BrushManager;
 	let historyManager: HistoryManager;
 
@@ -36,23 +38,11 @@
 		// const light = new BABYLON.DirectionalLight('directional', new BABYLON.Vector3(0, -1, 0), scene);
 		// light.intensity = 0.7;
 
-		// const builder = new Polygon(scene, {
-		// 	nodeDiameter: 0.1,
-		// 	nodeHeight: 1,
-  //           wallHeight: 1,
-		// 	nodeColor: BABYLON.Color3.Purple(),
-		// 	wallThickness: 0.02,
-		// 	wallColor: BABYLON.Color3.Red(),
-		// 	closePath: true
-		// });
-		// builder.addPoint(new BABYLON.Vector3(0, -2.5, 0));
-		// builder.addPoint(new BABYLON.Vector3(1, -2.5, 0));
-		// builder.addPoint(new BABYLON.Vector3(1, -2.5, 1));
-		// builder.addPoint(new BABYLON.Vector3(0, -2.5, 1));
+        polygonManager = new PolygonManager(scene);
 
 		pointCloudManager = new PointCloudManager(scene);
 		pointCloudManager.loadPointCloud('http://127.0.0.1:8001/pcd').then(() => {
-			brushManager = new BrushManager(pointCloudManager, scene, cameraContainer);
+			brushManager = new BrushManager(pointCloudManager, polygonManager, scene, cameraContainer);
 			historyManager = new HistoryManager(pointCloudManager);
 		});
 

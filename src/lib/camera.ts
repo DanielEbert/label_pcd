@@ -2,6 +2,9 @@ import * as BABYLON from '@babylonjs/core';
 import * as GUI from '@babylonjs/gui';
 import { clamp } from './util';
 
+export const LAYER_MASK_EVERYTHING   = 0x0FFFFFFF;
+export const LAYER_MASK_TOPDOWN_ONLY = 0x10000000;
+
 export class CameraContainer {
     public activeControlCamera: BABYLON.Camera | null = null;
 };
@@ -119,6 +122,7 @@ export function setupCamera(
 
     const freeCamera = new BABYLON.FreeCamera("freeCamera", new BABYLON.Vector3(0, 0, -1), scene);
     freeCamera.setTarget(BABYLON.Vector3.Zero())
+    freeCamera.minZ = 0;
     freeCamera.inputs.clear()
     freeCamera.inputs.addKeyboard()
 
@@ -386,6 +390,9 @@ export function setupCamera(
             event.preventDefault();
         }
     });
+
+    topDownCamera.layerMask = LAYER_MASK_EVERYTHING | LAYER_MASK_TOPDOWN_ONLY;
+    freeCamera.layerMask = LAYER_MASK_EVERYTHING;
 
     engine.onResizeObservable.add(() => {
         const currentOrthoHeight = topDownCamera.orthoTop! - topDownCamera.orthoBottom!;

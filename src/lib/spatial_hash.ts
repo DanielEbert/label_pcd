@@ -2,6 +2,9 @@ import * as BABYLON from '@babylonjs/core';
 
 export class SpatialHash {
     private grid: Map<string, number[]> = new Map()
+    private minCell: { x: number, y: number, z: number } = { x: Infinity, y: Infinity, z: Infinity };
+    private maxCell: { x: number, y: number, z: number } = { x: -Infinity, y: -Infinity, z: -Infinity };
+
     constructor(private cellSize: number, particles: BABYLON.CloudPoint[]) {
         particles.forEach((particle: BABYLON.CloudPoint, index: number) => {
             if (!particle || !particle.position) return;
@@ -14,6 +17,13 @@ export class SpatialHash {
                 this.grid.set(cellKey, []);
             }
             this.grid.get(cellKey)!.push(index);
+
+            this.minCell.x = Math.min(this.minCell.x, cellX);
+            this.minCell.y = Math.min(this.minCell.y, cellY);
+            this.minCell.z = Math.min(this.minCell.z, cellZ);
+            this.maxCell.x = Math.max(this.maxCell.x, cellX);
+            this.maxCell.y = Math.max(this.maxCell.y, cellY);
+            this.maxCell.z = Math.max(this.maxCell.z, cellZ);
         })
     }
 
@@ -161,6 +171,91 @@ export class SpatialHash {
                 if (distanceSq < maxDistanceSq) result.push(i);
             })
         })
+        return result;
+    }
+
+    // ignores y (up) coordinate
+    private isPointInPolygonXZ(point: BABYLON.Vector3, polygonVertices: BABYLON.Vector3[]): boolean {
+        const x = point.x;
+        const z = point.z;
+        let isInside = false;
+        const n = polygonVertices.length;
+
+        if (n < 3) {
+            // A polygon needs at least 3 vertices
+            return false;
+        }
+
+        for (let i = 0, j = n - 1; i < n; j = i++) {
+            const vi = polygonVertices[i];
+            const vj = polygonVertices[j];
+
+            // Check if the edge (vi, vj) crosses the horizontal ray extending to the right from (x, z)
+            const intersect = ((vi.z > z) !== (vj.z > z)) // One vertex above, one below (or on) the ray's Z
+                && (x < (vj.x - vi.x) * (z - vi.z) / (vj.z - vi.z) + vi.x); // X coordinate of intersection is to the right of the point
+
+            if (intersect) {
+                isInside = !isInside; // Flip the inside/outside state
+            }
+        }
+
+        return isInside;
+    }
+
+    /**
+     * Finds indices of all particles whose XZ coordinates lie within the specified polygon.
+     * Y (up) is ignored.
+     * @returns An array of indices of particles inside the polygon.
+     */
+    findParticlesInPolygon(polygonVertices: BABYLON.Vector3[], particles: BABYLON.CloudPoint[]): number[] {
+        if (!polygonVertices || polygonVertices.length < 3) {
+            return [];
+        }
+
+        const result: number[] = [];
+        const checkedIndices = new Set<number>();
+
+        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (const p of polygonVertices) {
+            minX = Math.min(minX, p.x);
+            maxX = Math.max(maxX, p.x);
+            minZ = Math.min(minZ, p.z);
+            maxZ = Math.max(maxZ, p.z);
+        }
+
+        const minCellX = Math.floor(minX / this.cellSize);
+        const maxCellX = Math.floor(maxX / this.cellSize);
+        const minCellZ = Math.floor(minZ / this.cellSize);
+        const maxCellZ = Math.floor(maxZ / this.cellSize);
+
+        // Iterate through potentially relevant cells
+        for (let cx = minCellX; cx <= maxCellX; cx++) {
+            for (let cz = minCellZ; cz <= maxCellZ; cz++) {
+                // Iterate through all *possible* Y cells
+                const startY = (this.minCell.y === Infinity) ? 0 : this.minCell.y;
+                const endY = (this.maxCell.y === -Infinity) ? 0 : this.maxCell.y;
+
+                for (let cy = startY; cy <= endY; cy++) {
+                    const cellKey = `${cx},${cy},${cz}`;
+
+                    if (this.grid.has(cellKey)) {
+                        const indices = this.grid.get(cellKey)!;
+                        for (const i of indices) {
+                            if (checkedIndices.has(i)) continue;
+
+                            const particle = particles[i];
+                            if (!particle || !particle.position) continue;
+
+                            if (this.isPointInPolygonXZ(particle.position, polygonVertices)) {
+                                result.push(i);
+                            }
+                            checkedIndices.add(i);
+                        }
+                    }
+                }
+            }
+        }
+
         return result;
     }
 }
