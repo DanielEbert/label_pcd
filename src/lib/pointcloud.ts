@@ -1,5 +1,6 @@
 import * as BABYLON from '@babylonjs/core';
 import { SpatialHash } from './spatial_hash';
+import { paintColor } from './config';
 
 export class PointCloudManager {
 	public pcs: BABYLON.PointsCloudSystem | null = null;
@@ -158,7 +159,7 @@ export class PointCloudManager {
 			const particle = this.pcs.particles[i];
 
 			if (classValue === 1) {
-				particle.color = new BABYLON.Color4(0, 1, 0, 1);
+				particle.color = paintColor;
 			} else {
 				particle.color = this.getParticleInitColor(i);
 			}

@@ -3,12 +3,11 @@ import { Polygon } from './polygon';
 import type { PointCloudManager } from './pointcloud';
 import type { HistoryManager } from './history_manager';
 import type { CameraContainer } from './camera';
+import { paintColor } from './config';
 
 export class PolygonManager {
 	public activePolygon: Polygon | null = null;
 	public polygons: Polygon[] = [];
-	// TODO: is also in brushmanager, should put into common config file
-	private paintColor = new BABYLON.Color4(0, 1, 0, 1); // Green color for painting
 
 	constructor(
 		private scene: BABYLON.Scene,
@@ -51,12 +50,12 @@ export class PolygonManager {
 
 			if (
 				!particle.color ||
-				particle.color.r !== this.paintColor.r ||
-				particle.color.g !== this.paintColor.g ||
-				particle.color.b !== this.paintColor.b ||
-				particle.color.a !== this.paintColor.a
+				particle.color.r !== paintColor.r ||
+				particle.color.g !== paintColor.g ||
+				particle.color.b !== paintColor.b ||
+				particle.color.a !== paintColor.a
 			) {
-				this.pointCloudManager.setParticleColor(i, this.paintColor);
+				this.pointCloudManager.setParticleColor(i, paintColor);
 				this.pointCloudManager.pcsClass![i] = classValue;
 			}
 		});

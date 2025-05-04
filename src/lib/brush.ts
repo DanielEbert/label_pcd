@@ -4,6 +4,7 @@ import { CameraContainer } from './camera';
 import { clamp } from './util';
 import { PolygonManager } from './polygon_manager';
 import { SimState, DrawMode } from './state.svelte';
+import { paintColor } from './config';
 
 export class BrushManager {
 	public isPainting = false;
@@ -13,7 +14,6 @@ export class BrushManager {
 	private maxBrushSize = 10;
 	private lastPaintRay: BABYLON.Ray | null = null;
 
-	private paintColor = new BABYLON.Color4(0, 1, 0, 1); // Green color for painting
 	private highlightColor = new BABYLON.Color4(235 / 255, 137 / 255, 52 / 255, 1); // white
 
 	// Stores the indices of particles highlighted in the *previous* frame update.
@@ -34,7 +34,7 @@ export class BrushManager {
 	private getBaseColor(particleIndex: number): BABYLON.Color4 {
 		const particle = this.pointCloudManager.pcs!.particles[particleIndex];
 		if (this.pointCloudManager.pcsClass && this.pointCloudManager.pcsClass[particleIndex] === 1) {
-			return this.paintColor;
+			return paintColor;
 		} else {
 			return this.pointCloudManager.getParticleInitColor(particleIndex);
 		}
@@ -117,7 +117,7 @@ export class BrushManager {
 			const particle = this.pointCloudManager.pcs!.particles[i];
 			const targetColor =
 				this.simState.drawMode === DrawMode.Draw
-					? this.paintColor
+					? paintColor
 					: this.pointCloudManager.getParticleInitColor(i);
 			const classValue = this.simState.drawMode === DrawMode.Draw ? 1 : 0;
 
