@@ -14,9 +14,9 @@
 	let infoText: HTMLElement;
 	let cameraContainer = new CameraContainer();
 
-    let simState: SimState = new SimState();
+	let simState: SimState = new SimState();
 	let pointCloudManager: PointCloudManager;
-    let polygonManager: PolygonManager;
+	let polygonManager: PolygonManager;
 	let brushManager: BrushManager;
 	let historyManager: HistoryManager;
 
@@ -26,17 +26,17 @@
 
 	$effect(() => {
 		if (infoText) {
-            switch(simState.drawMode) {
-                case DrawMode.Draw:
-                    infoText.innerHTML = 'Drawing';
-                    break;
-                case DrawMode.Erase:
-                    infoText.innerHTML = 'Erasing';
-                    break;
-                case DrawMode.Poly:
-                    infoText.innerHTML = 'Polygon';
-                    break;
-            }
+			switch (simState.drawMode) {
+				case DrawMode.Draw:
+					infoText.innerHTML = 'Drawing';
+					break;
+				case DrawMode.Erase:
+					infoText.innerHTML = 'Erasing';
+					break;
+				case DrawMode.Poly:
+					infoText.innerHTML = 'Polygon';
+					break;
+			}
 		}
 	});
 
@@ -44,15 +44,27 @@
 		const scene = new BABYLON.Scene(engine);
 		setupCamera(canvas, engine, scene, cameraContainer);
 
-        const light = new BABYLON.HemisphericLight("light", new BABYLON.Vector3(0, 1, 0), scene);
+		const light = new BABYLON.HemisphericLight('light', new BABYLON.Vector3(0, 1, 0), scene);
 		// const light = new BABYLON.DirectionalLight('directional', new BABYLON.Vector3(0, -1, 0), scene);
 		// light.intensity = 0.7;
 
 		pointCloudManager = new PointCloudManager(scene);
-		pointCloudManager.loadPointCloud('http://127.0.0.1:8001/pcd').then(() => {
+		// TODO: port may be updated
+		pointCloudManager.loadPointCloud('http://127.0.0.1:8000/pcd').then(() => {
 			historyManager = new HistoryManager(pointCloudManager);
-            polygonManager = new PolygonManager(scene, pointCloudManager, historyManager, cameraContainer);
-			brushManager = new BrushManager(pointCloudManager, polygonManager, scene, cameraContainer, simState);
+			polygonManager = new PolygonManager(
+				scene,
+				pointCloudManager,
+				historyManager,
+				cameraContainer
+			);
+			brushManager = new BrushManager(
+				pointCloudManager,
+				polygonManager,
+				scene,
+				cameraContainer,
+				simState
+			);
 		});
 
 		return scene;
@@ -65,9 +77,9 @@
 		if (event.key === '2') {
 			simState.drawMode = DrawMode.Erase;
 		}
-        if (event.key === '3') {
-            simState.drawMode = DrawMode.Poly;
-        }
+		if (event.key === '3') {
+			simState.drawMode = DrawMode.Poly;
+		}
 		if (event.ctrlKey && event.key === 'z') {
 			if (historyManager) historyManager.undo();
 		}
@@ -109,7 +121,8 @@
 					if (event.button === 0) {
 						// Left mouse button
 						brushManager.startPainting();
-                        if (simState.drawMode === DrawMode.Poly) polygonManager.onClick(lastCursorX, lastCursorY);
+						if (simState.drawMode === DrawMode.Poly)
+							polygonManager.onClick(lastCursorX, lastCursorY);
 						pendingCursorUpdate = true;
 					}
 					break;
@@ -156,7 +169,7 @@
 		right: 10px;
 		width: 60px;
 		height: 20px;
-        user-select: none;
+		user-select: none;
 	}
 
 	#infoText {
@@ -170,6 +183,6 @@
 		font-family: monospace;
 		font-size: 12px;
 		z-index: 1000;
-        user-select: none;
+		user-select: none;
 	}
 </style>
