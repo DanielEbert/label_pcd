@@ -1,6 +1,7 @@
 export enum DrawMode {
     Draw = "DRAW",
     Erase = "ERASE",
+    Poly = "POLY",
 };
 
 export class SimState {

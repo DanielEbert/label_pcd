@@ -26,7 +26,17 @@
 
 	$effect(() => {
 		if (infoText) {
-			infoText.innerHTML = simState.drawMode == DrawMode.Draw ? 'Drawing' : 'Erasing';
+            switch(simState.drawMode) {
+                case DrawMode.Draw:
+                    infoText.innerHTML = 'Drawing';
+                    break;
+                case DrawMode.Erase:
+                    infoText.innerHTML = 'Erasing';
+                    break;
+                case DrawMode.Poly:
+                    infoText.innerHTML = 'Polygon';
+                    break;
+            }
 		}
 	});
 
@@ -41,7 +51,7 @@
 		pointCloudManager = new PointCloudManager(scene);
 		pointCloudManager.loadPointCloud('http://127.0.0.1:8001/pcd').then(() => {
 			historyManager = new HistoryManager(pointCloudManager);
-            polygonManager = new PolygonManager(scene, pointCloudManager, historyManager);
+            polygonManager = new PolygonManager(scene, pointCloudManager, historyManager, cameraContainer);
 			brushManager = new BrushManager(pointCloudManager, polygonManager, scene, cameraContainer, simState);
 		});
 
@@ -55,6 +65,9 @@
 		if (event.key === '2') {
 			simState.drawMode = DrawMode.Erase;
 		}
+        if (event.key === '3') {
+            simState.drawMode = DrawMode.Poly;
+        }
 		if (event.ctrlKey && event.key === 'z') {
 			if (historyManager) historyManager.undo();
 		}
@@ -96,6 +109,7 @@
 					if (event.button === 0) {
 						// Left mouse button
 						brushManager.startPainting();
+                        if (simState.drawMode === DrawMode.Poly) polygonManager.onClick(lastCursorX, lastCursorY);
 						pendingCursorUpdate = true;
 					}
 					break;

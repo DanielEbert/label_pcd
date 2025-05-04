@@ -1,6 +1,5 @@
 # TODO
 
-- polygon creating keybindings
 - toggle to show marked points only
 - top down image based on simple coloring rules like density and avg height, and sam2 integration
 - multiple pcds in the same view

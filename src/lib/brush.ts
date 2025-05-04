@@ -70,6 +70,11 @@ export class BrushManager {
 
         const rayLength = 40;
 
+        if (this.simState.drawMode == DrawMode.Poly) {
+            this.handleHighlighting(ray, rayLength);
+            return;
+        }
+
         if (this.isPainting) {
             this.handlePainting(ray, rayLength);
         } else {

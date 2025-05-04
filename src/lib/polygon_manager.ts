@@ -2,21 +2,48 @@ import * as BABYLON from '@babylonjs/core';
 import { Polygon } from "./polygon";
 import type { PointCloudManager } from './pointcloud';
 import type { HistoryManager } from './history_manager';
+import type { CameraContainer } from './camera';
 
 export class PolygonManager {
+    public activePolygon: Polygon | null = null;
     public polygons: Polygon[] = [];
     // TODO: is also in brushmanager, should put into common config file
     private paintColor = new BABYLON.Color4(0, 1, 0, 1); // Green color for painting
 
-    constructor(private scene: BABYLON.Scene, private pointCloudManager: PointCloudManager, private historyManager: HistoryManager) {
+    constructor(
+            private scene: BABYLON.Scene,
+            private pointCloudManager: PointCloudManager,
+            private historyManager: HistoryManager,
+            private cameraContainer: CameraContainer
+    ) {
         const builder = new Polygon(scene, this, {
             closePath: true
         });
-        builder.addPoint(new BABYLON.Vector3(0, -2.5, 0));
-        builder.addPoint(new BABYLON.Vector3(1, -2.5, 0));
-        builder.addPoint(new BABYLON.Vector3(1, -2.5, 1));
-        builder.addPoint(new BABYLON.Vector3(0, -2.5, 1));
+        builder.addPoint(new BABYLON.Vector3(0, 0, 0));
+        builder.addPoint(new BABYLON.Vector3(1, 0, 0));
+        builder.addPoint(new BABYLON.Vector3(1, 0, 1));
+        builder.addPoint(new BABYLON.Vector3(0, 0, 1));
         this.polygons.push(builder);
+    }
+
+    onClick(cursorX: number, cursorY: number) {
+        console.log('on poly')
+        if (!this.activePolygon) {
+            console.log('Creating new polygon')
+            this.activePolygon = new Polygon(this.scene, this, {
+                closePath: true
+            });
+            this.polygons.push(this.activePolygon);
+        }
+
+        const ray = this.scene.createPickingRay(
+            cursorX,
+            cursorY,
+            BABYLON.Matrix.Identity(),
+            this.cameraContainer.activeControlCamera,
+            false
+        );
+        this.activePolygon.addPoint(ray.origin)
     }
 
     onColorPolygon(poly: Polygon) {
@@ -48,5 +75,6 @@ export class PolygonManager {
 
     onPolygonDeleted(polygon: Polygon) {
         this.polygons = this.polygons.filter(p => p !== polygon);
+        if (polygon === this.activePolygon) this.activePolygon = null;
     }
 }
