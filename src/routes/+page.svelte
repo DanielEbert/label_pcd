@@ -38,12 +38,11 @@
 		// const light = new BABYLON.DirectionalLight('directional', new BABYLON.Vector3(0, -1, 0), scene);
 		// light.intensity = 0.7;
 
-        polygonManager = new PolygonManager(scene);
-
 		pointCloudManager = new PointCloudManager(scene);
 		pointCloudManager.loadPointCloud('http://127.0.0.1:8001/pcd').then(() => {
-			brushManager = new BrushManager(pointCloudManager, polygonManager, scene, cameraContainer);
 			historyManager = new HistoryManager(pointCloudManager);
+            polygonManager = new PolygonManager(scene, pointCloudManager, historyManager);
+			brushManager = new BrushManager(pointCloudManager, polygonManager, scene, cameraContainer);
 		});
 
 		return scene;

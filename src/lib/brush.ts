@@ -21,9 +21,8 @@ export class BrushManager {
     private paintColor = new BABYLON.Color4(0, 1, 0, 1); // Green color for painting
     private highlightColor = new BABYLON.Color4(235 / 255, 137 / 255, 52 / 255, 1); // white
 
-    private highlightedPointIdxs: number[] = [];
-    // could be simplified, we have func to get original color back
-    private originalColors = new Map<number, BABYLON.Color4>();
+    // Stores the indices of particles highlighted in the *previous* frame update.
+    public highlightedIndicesLastFrame = new Set<number>();
 
     constructor(
         private pointCloudManager: PointCloudManager,
@@ -36,7 +35,24 @@ export class BrushManager {
         this.brushRadius = clamp(this.brushRadius - delta / 500, this.minBrushSize, this.maxBrushSize);
     }
 
+    private getBaseColor(particleIndex: number): BABYLON.Color4 {
+        const particle = this.pointCloudManager.pcs!.particles[particleIndex];
+        if (this.pointCloudManager.pcsClass && this.pointCloudManager.pcsClass[particleIndex] === 1) {
+            return this.paintColor;
+        } else {
+            return this.pointCloudManager.getParticleInitColor(particle);
+        }
+    }
+
+    private restoreParticlesToBaseColor(indices: Iterable<number>) {
+        for (const i of indices) {
+            this.pointCloudManager.setParticleColor(i, this.getBaseColor(i));
+        }
+    }
+
     public startPainting(): void {
+        this.restoreParticlesToBaseColor(this.highlightedIndicesLastFrame);
+        this.highlightedIndicesLastFrame.clear()
         this.isPainting = true;
     }
 
@@ -56,99 +72,92 @@ export class BrushManager {
         ray.direction.normalize();
 
         const rayLength = 40;
-        let particleIdxsNearRay = null;
-
-        this.clearHighlightedPoints();
 
         if (this.isPainting) {
-            if (this.lastPaintRay == null) {
-                particleIdxsNearRay = this.pointCloudManager.pcsLookup!.findParticlesNearRay(
-                    ray,
-                    rayLength,
-                    this.brushRadius,
-                    this.pointCloudManager.pcs!.particles
-                );
-            } else {
-                const a = ray.origin;
-                const b = ray.origin.add(ray.direction.normalize().scale(rayLength));
-                const c = this.lastPaintRay.origin;
-                const d = this.lastPaintRay.origin.add(this.lastPaintRay.direction.normalize().scale(rayLength));
-                particleIdxsNearRay = this.pointCloudManager.pcsLookup!.findParticlesNearRectangle(
-                    a,
-                    b,
-                    c,
-                    d,
-                    this.brushRadius,
-                    this.pointCloudManager.pcs!.particles
-                );
-            }
-            this.lastPaintRay = ray;
-
-            particleIdxsNearRay!.forEach((i) => {
-                const particle = this.pointCloudManager.pcs!.particles[i];
-                let targetColor: BABYLON.Color4 | null = null;
-                let classValue: number | null = null;
-                if (this.drawMode === DrawMode.Draw) {
-                    targetColor = this.paintColor;
-                    classValue = 1;
-                } else if (this.drawMode === DrawMode.Erase) {
-                    targetColor = this.pointCloudManager.getParticleInitColor(particle);
-                    classValue = 0;
-                }
-
-                if (targetColor && classValue !== null) {
-                    if (
-                        !particle.color ||
-                        particle.color.r !== targetColor.r ||
-                        particle.color.g !== targetColor.g ||
-                        particle.color.b !== targetColor.b ||
-                        particle.color.a !== targetColor.a
-                    ) {
-                        this.pointCloudManager.setParticleColor(i, targetColor);
-                        this.pointCloudManager.pcsClass![i] = classValue;
-                    }
-                }
-            });
+            this.handlePainting(ray, rayLength);
         } else {
-            if (this.cameraContainer.activeControlCamera!.name === 'orbitCamera') {
-                // can't be used currently because too slow with spatial hashing datastructure
-                return;
-            }
-            this.highlightedPointIdxs = this.pointCloudManager.pcsLookup!.findParticlesNearRay(
+            this.handleHighlighting(ray, rayLength);
+        }
+    }
+
+    private handlePainting(ray: BABYLON.Ray, rayLength: number) {
+        if (this.highlightedIndicesLastFrame.size > 0) {
+            this.restoreParticlesToBaseColor(this.highlightedIndicesLastFrame);
+            this.highlightedIndicesLastFrame.clear();
+        }
+
+        let particleIdxsToPaint = [];
+        if (this.lastPaintRay == null) {
+            particleIdxsToPaint = this.pointCloudManager.pcsLookup!.findParticlesNearRay(
                 ray,
                 rayLength,
                 this.brushRadius,
                 this.pointCloudManager.pcs!.particles
             );
-
-            this.polygonManager.polygons.forEach(poly => {
-                const particlesInPolygon = this.pointCloudManager.pcsLookup!.findParticlesInPolygon(
-                    poly.nodePositions,
-                    this.pointCloudManager.pcs!.particles
-                );
-
-                this.highlightedPointIdxs.push(...particlesInPolygon);
-            });
-
-            this.highlightedPointIdxs = [...new Set(this.highlightedPointIdxs)]
-
-            this.highlightedPointIdxs.forEach((i) => {
-                const particle = this.pointCloudManager.pcs!.particles[i];
-                this.originalColors.set(i, particle.color!.clone());
-                this.pointCloudManager.setParticleColor(i, this.highlightColor);
-            });
+        } else {
+            const a = ray.origin;
+            const b = ray.origin.add(ray.direction.normalize().scale(rayLength));
+            const c = this.lastPaintRay.origin;
+            const d = this.lastPaintRay.origin.add(this.lastPaintRay.direction.normalize().scale(rayLength));
+            particleIdxsToPaint = this.pointCloudManager.pcsLookup!.findParticlesNearRectangle(
+                a, b, c, d, this.brushRadius, this.pointCloudManager.pcs!.particles);
         }
+        this.lastPaintRay = ray;
+
+        particleIdxsToPaint!.forEach((i) => {
+            const particle = this.pointCloudManager.pcs!.particles[i];
+            const targetColor = this.drawMode === DrawMode.Draw
+                ? this.paintColor
+                : this.pointCloudManager.getParticleInitColor(particle);
+            const classValue = this.drawMode === DrawMode.Draw ? 1 : 0;
+
+            if (
+                !particle.color ||
+                particle.color.r !== targetColor.r ||
+                particle.color.g !== targetColor.g ||
+                particle.color.b !== targetColor.b ||
+                particle.color.a !== targetColor.a
+            ) {
+                this.pointCloudManager.setParticleColor(i, targetColor);
+                this.pointCloudManager.pcsClass![i] = classValue;
+            }
+        });
     }
 
-    private clearHighlightedPoints() {
-        if (this.highlightedPointIdxs.length > 0) {
-            this.highlightedPointIdxs.forEach((i) => {
-                if (this.originalColors.has(i)) {
-                    this.pointCloudManager.setParticleColor(i, this.originalColors.get(i)!);
-                }
-            });
-            this.highlightedPointIdxs = [];
-            this.originalColors.clear();
+    private handleHighlighting(ray: BABYLON.Ray, rayLength: number) {
+        if (this.cameraContainer.activeControlCamera!.name === 'orbitCamera') {
+            // can't be used currently because too slow with spatial hashing datastructure
+            return;
         }
-    };
+
+        const nearCursorIdxs = this.pointCloudManager.pcsLookup!.findParticlesNearRay(
+            ray, rayLength, this.brushRadius, this.pointCloudManager.pcs!.particles);
+
+        let inPolygonIdxs: number[] = []
+        this.polygonManager.polygons?.forEach(poly => {
+            const particlesInPolygon = this.pointCloudManager.pcsLookup!.findParticlesInPolygon(
+                poly.nodePositions,
+                this.pointCloudManager.pcs!.particles
+            );
+
+            inPolygonIdxs.push(...particlesInPolygon);
+        });
+
+        const highlightIdxsThisFrame = new Set([...nearCursorIdxs, ...inPolygonIdxs])
+
+        const indicesToRestore = new Set<number>();
+        this.highlightedIndicesLastFrame.forEach((i) => {
+            if (!highlightIdxsThisFrame.has(i)) {
+                indicesToRestore.add(i)
+            }
+        });
+
+        this.restoreParticlesToBaseColor(indicesToRestore)
+
+        highlightIdxsThisFrame.forEach(i => {
+            this.pointCloudManager.setParticleColor(i, this.highlightColor);
+        });
+
+        this.highlightedIndicesLastFrame = highlightIdxsThisFrame;
+    }
 }

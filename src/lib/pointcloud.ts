@@ -101,9 +101,9 @@ export class PointCloudManager {
         this.updatedParticleIdxs.clear();
     }
 
-    public setParticleColor(particleIndex: number, color: BABYLON.Color4): void {
+    public setParticleColor(particleIndex: number, color: BABYLON.Color4): boolean {
         if (!this.isPointCloudReady() || !this.pcs || !this.pcs.particles) {
-            return;
+            return false;
         }
         
         const particle = this.pcs.particles[particleIndex];
@@ -117,6 +117,8 @@ export class PointCloudManager {
             
             particle.color = color.clone();
             this.updatedParticleIdxs.add(particleIndex);
+            return true;
         }
+        return false;
     }
 }
