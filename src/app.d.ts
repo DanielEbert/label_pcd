@@ -17,13 +17,13 @@ interface MeshMetadata {
 	type: 'node' | 'edge';
 	index?: number; // index in nodePositions and node array for nodes
 	pointsIndex?: [number, number]; // indices of the two nodes for edges
+    _dragBehavior?: PointerDragBehavior; // Store reference to drag behavior
+    _originalMaterial?: Material; // Store original material when highlighting
 }
 
 declare module '@babylonjs/core' {
 	export interface Mesh {
-		_originalMaterial?: Material; // Store original material when highlighting
 		_highlightMat?: StandardMaterial; // Store the highlight material
-		_dragBehavior?: PointerDragBehavior; // Store reference to drag behavior
 		metadata?: MeshMetadata; // Custom metadata structure
 	}
 }

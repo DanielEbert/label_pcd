@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import * as BABYLON from '@babylonjs/core';
-	import { Polygon } from '$lib/polygon';
 	import { setupCamera, CameraContainer } from '$lib/camera';
-	import { BrushManager, DrawMode } from '$lib/brush';
+	import { BrushManager } from '$lib/brush';
 	import { PointCloudManager } from '$lib/pointcloud';
 	import { HistoryManager } from '$lib/history_manager';
 	import { PolygonManager } from '$lib/polygon_manager';
+	import { SimState, DrawMode } from '$lib/state.svelte';
 
 	let canvas: HTMLCanvasElement;
 	let scene: BABYLON.Scene | null = null;
@@ -14,19 +14,19 @@
 	let infoText: HTMLElement;
 	let cameraContainer = new CameraContainer();
 
+    let simState: SimState = new SimState();
 	let pointCloudManager: PointCloudManager;
     let polygonManager: PolygonManager;
 	let brushManager: BrushManager;
 	let historyManager: HistoryManager;
 
-	let drawMode = $state(DrawMode.Draw);
 	let lastCursorX = 0;
 	let lastCursorY = 0;
 	let pendingCursorUpdate = false;
 
 	$effect(() => {
 		if (infoText) {
-			infoText.innerHTML = drawMode == DrawMode.Draw ? 'Drawing' : 'Erasing';
+			infoText.innerHTML = simState.drawMode == DrawMode.Draw ? 'Drawing' : 'Erasing';
 		}
 	});
 
@@ -42,7 +42,7 @@
 		pointCloudManager.loadPointCloud('http://127.0.0.1:8001/pcd').then(() => {
 			historyManager = new HistoryManager(pointCloudManager);
             polygonManager = new PolygonManager(scene, pointCloudManager, historyManager);
-			brushManager = new BrushManager(pointCloudManager, polygonManager, scene, cameraContainer);
+			brushManager = new BrushManager(pointCloudManager, polygonManager, scene, cameraContainer, simState);
 		});
 
 		return scene;
@@ -50,13 +50,10 @@
 
 	const handleKeyDown = (event: KeyboardEvent) => {
 		if (event.key === '1') {
-			drawMode = DrawMode.Draw;
-			// TODO: check if we can avoid 2 drawMode
-			if (brushManager) brushManager.drawMode = drawMode;
+			simState.drawMode = DrawMode.Draw;
 		}
 		if (event.key === '2') {
-			drawMode = DrawMode.Erase;
-			if (brushManager) brushManager.drawMode = drawMode;
+			simState.drawMode = DrawMode.Erase;
 		}
 		if (event.ctrlKey && event.key === 'z') {
 			if (historyManager) historyManager.undo();

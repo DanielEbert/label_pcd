@@ -3,14 +3,10 @@ import { PointCloudManager } from './pointcloud';
 import { CameraContainer } from './camera';
 import { clamp } from './util';
 import { PolygonManager } from './polygon_manager';
+import { SimState, DrawMode } from './state.svelte'
 
-export enum DrawMode {
-    Draw = "DRAW",
-    Erase = "ERASE",
-};
 
 export class BrushManager {
-    public drawMode = DrawMode.Draw;
     public isPainting = false;
 
     private brushRadius = 0.2;
@@ -28,7 +24,8 @@ export class BrushManager {
         private pointCloudManager: PointCloudManager,
         private polygonManager: PolygonManager,
         private scene: BABYLON.Scene,
-        private cameraContainer: CameraContainer
+        private cameraContainer: CameraContainer,
+        private simState: SimState
     ) { }
 
     public adjustBrushSize(delta: number) {
@@ -106,10 +103,10 @@ export class BrushManager {
 
         particleIdxsToPaint!.forEach((i) => {
             const particle = this.pointCloudManager.pcs!.particles[i];
-            const targetColor = this.drawMode === DrawMode.Draw
+            const targetColor = this.simState.drawMode === DrawMode.Draw
                 ? this.paintColor
                 : this.pointCloudManager.getParticleInitColor(particle);
-            const classValue = this.drawMode === DrawMode.Draw ? 1 : 0;
+            const classValue = this.simState.drawMode === DrawMode.Draw ? 1 : 0;
 
             if (
                 !particle.color ||
