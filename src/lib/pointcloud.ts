@@ -94,20 +94,12 @@ export class PointCloudManager {
 		};
 
 		const getColor = (value: number): BABYLON.Color4 => {
-			// Magenta (high) to blue to cyan (low)
-			if (value < 0.33) {
-				// Cyan to blue transition (low values)
-				const t = value * 3;
-				return new BABYLON.Color4(0, 0.7 + 0.3 * (1 - t), 1, 1);
-			} else if (value < 0.66) {
-				// Blue to purple transition (mid values)
-				const t = (value - 0.33) * 3;
-				return new BABYLON.Color4(t * 0.8, 0.7 * (1 - t), 1, 1);
-			} else {
-				// Purple to magenta transition (high values)
-				const t = (value - 0.66) * 3;
-				return new BABYLON.Color4(0.8 + 0.2 * t, 0, 0.7 + 0.3 * t, 1);
-			}
+			const color3 = BABYLON.Color3.FromHSV(
+				(1 - value) * 360, // hue from blue to red
+				0.7, // saturation
+				1 // value
+			);
+			return new BABYLON.Color4(color3.r, color3.g, color3.b, 1);
 		};
 
 		grid.grid.forEach((idxs, grid_key) => {
